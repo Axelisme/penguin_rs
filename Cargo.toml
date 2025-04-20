@@ -1,0 +1,16 @@
+[package]
+name = "penguin_rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "penguin_rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.24.0", features = ["extension-module"] }
+rand_distr = "0.5.1"
+ndarray = "0.16"
+rand = "0.9.1"
+kdtree = "0.7.0"
