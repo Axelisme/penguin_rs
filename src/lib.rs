@@ -42,7 +42,7 @@ impl PySimulation {
         );
 
         let mut rng = StdRng::seed_from_u64(seed);
-        let pos_dist = Uniform::new(0.3 * box_size, 0.7 * box_size).unwrap();
+        let pos_dist = Uniform::new(0.2 * box_size, 0.8 * box_size).unwrap();
         let temp_dist = Normal::new(init_temp_mean, init_temp_std).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                 "Invalid temp distribution: {}",

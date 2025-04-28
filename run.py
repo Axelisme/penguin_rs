@@ -10,7 +10,7 @@ SEED = 1
 NUM_PENGUINS = 500
 PENGUIN_MAX_VEL = 2.0
 PENGUIN_RADIUS = 0.1
-HEAT_GEN_COEFF = 1.1
+HEAT_GEN_COEFF = 1.5
 HEAT_P2E_COEFF = 10.0
 HEAT_E2P_COEFF = 0.1
 INIT_TEMP_MEAN = 19.0
@@ -44,7 +44,7 @@ sim = PySimulation(
 
 
 # --- Plotting Parameters ---
-SIM_TIME = 200.0
+SIM_TIME = 500.0
 DT = 0.001
 TOTAL_STEPS = int(SIM_TIME / DT)
 FRAMES_PER_SECOND = 30  # Target FPS for animation
@@ -81,23 +81,24 @@ scatter = ax.scatter(
     c=body_temps_init,
     cmap="viridis",
     edgecolor="k",
-    s=50,
+    # edgecolor="none",
+    s=5,
     animated=True,
 )
 # 繪製初始企鵝速度方向 (quiver)
-quiver = ax.quiver(
-    [p[0] for p in positions_init],
-    [p[1] for p in positions_init],
-    [v[0] for v in velocities_init],
-    [v[1] for v in velocities_init],
-    scale=20,
-    scale_units="inches",
-    color="black",
-    headwidth=3,
-    headlength=4,
-    width=0.005,
-    animated=True,
-)
+# quiver = ax.quiver(
+#     [p[0] for p in positions_init],
+#     [p[1] for p in positions_init],
+#     [v[0] for v in velocities_init],
+#     [v[1] for v in velocities_init],
+#     scale=20,
+#     scale_units="inches",
+#     color="black",
+#     headwidth=3,
+#     headlength=4,
+#     width=0.005,
+#     animated=True,
+# )
 
 # Plot settings
 ax.set_xlim(0, BOX_SIZE)
@@ -131,8 +132,8 @@ def update(frame):
     im.set_data(air_temp_grid.T)
     scatter.set_offsets(pos_array)
     scatter.set_array(body_temps)
-    quiver.set_offsets(pos_array)
-    quiver.set_UVC(vel_array[:, 0], vel_array[:, 1])
+    # quiver.set_offsets(pos_array)
+    # quiver.set_UVC(vel_array[:, 0], vel_array[:, 1])
 
     # --- Update Color Limits Dynamically ---
     air_min, air_max = np.min(air_temp_grid), np.max(air_temp_grid)
@@ -161,11 +162,12 @@ def update(frame):
 
     print(f"\r{title_text}", end="")
 
-    return im, scatter, title, quiver
+    # return im, scatter, title, quiver
+    return im, scatter, title  # , quiver
 
 
-# --- Run Animation ---
-print("Starting animation...")
+# --- Save Animation as GIF ---
+print("Rendering animation to GIF (this may take a while)...")
 start_time = time.time()
 
 ani = animation.FuncAnimation(
@@ -178,7 +180,9 @@ ani = animation.FuncAnimation(
 )
 
 plt.tight_layout()
+# ani.save("penguin_simulation.gif", writer="pillow", fps=FRAMES_PER_SECOND)
 plt.show()
 
 end_time = time.time()
 print(f"\nSimulation and animation complete. Total time: {end_time - start_time:.2f}s")
+print("GIF saved as penguin_simulation.gif")
