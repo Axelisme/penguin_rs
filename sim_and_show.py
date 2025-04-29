@@ -124,7 +124,7 @@ def update(frame):
     positions, velocities, body_temps, air_temps_vec = sim.get_state()
 
     pos_array = np.array(positions)
-    vel_array = np.array(velocities)
+    # vel_array = np.array(velocities)
     body_temps = np.array(body_temps)
     air_temp_grid = np.array(air_temps_vec).reshape((NUM_GRID, NUM_GRID))
 

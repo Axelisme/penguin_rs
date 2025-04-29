@@ -56,6 +56,8 @@ coverage.xml
 # Django stuff:
 *.log
 *.pot
+*.npz
+*.mp4
 
 .DS_Store
 
