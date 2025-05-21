@@ -1,23 +1,22 @@
 # penguin_rs/__init__.pyi
 from typing import List, Tuple
 
+import numpy as np
+
 class PySimulation:
     """
     企鵝群體模擬主類別。
     """
     def __init__(
         self,
-        seed: int,
-        num_penguins: int,
+        init_penguins: np.ndarray[np.float64, np.ndim[2]],
+        init_air_temp: np.ndarray[np.float64, np.ndim[2]],
         penguin_max_vel: float,
         penguin_radius: float,
         heat_gen_coeff: float,
         heat_p2e_coeff: float,
         heat_e2p_coeff: float,
-        init_temp_mean: float,
-        init_temp_std: float,
         prefer_temp_common: float,
-        num_grid: int,
         box_size: float,
         deffusion_coeff: float,
         decay_coeff: float,

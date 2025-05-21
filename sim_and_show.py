@@ -23,19 +23,24 @@ DECAY_COEFF = 4.0
 TEMP_ROOM = -30.0
 
 
+init_penguin_positions = np.random.rand(NUM_PENGUINS, 2) * BOX_SIZE
+init_penguin_temps = np.random.normal(INIT_TEMP_MEAN, INIT_TEMP_STD, NUM_PENGUINS)
+init_air_temp = np.random.rand(NUM_GRID, NUM_GRID) * 10.0
+
+init_penguin_infos = np.concatenate(
+    [init_penguin_positions, init_penguin_temps[:, None]], axis=1
+)
+
 # Create the simulation instance
 sim = PySimulation(
-    seed=SEED,
-    num_penguins=NUM_PENGUINS,
+    init_penguins=init_penguin_infos,
+    init_air_temp=init_air_temp,
     penguin_max_vel=PENGUIN_MAX_VEL,
     penguin_radius=PENGUIN_RADIUS,
     heat_gen_coeff=HEAT_GEN_COEFF,
     heat_p2e_coeff=HEAT_P2E_COEFF,
     heat_e2p_coeff=HEAT_E2P_COEFF,
-    init_temp_mean=INIT_TEMP_MEAN,
-    init_temp_std=INIT_TEMP_STD,
     prefer_temp_common=PREFER_TEMP_COMMON,
-    num_grid=NUM_GRID,
     box_size=BOX_SIZE,
     deffusion_coeff=DEFFUSION_COEFF,
     decay_coeff=DECAY_COEFF,
