@@ -8,23 +8,31 @@ from tqdm.auto import tqdm
 # Parameters based on main.rs
 SEED = 1
 NUM_PENGUINS = 500
-PENGUIN_MAX_VEL = 2.0
+TEMP_DRIVE_FACTOR = 0.1
+COLI_DRIVE_FACTOR = 2.0
 PENGUIN_RADIUS = 0.1
-HEAT_GEN_COEFF = 1.1
-HEAT_P2E_COEFF = 10.0
-HEAT_E2P_COEFF = 0.1
+HEAT_GEN_COEFF = 2.0
+HEAT_P2E_COEFF = 1.0
+HEAT_E2P_COEFF = 1.0
 INIT_TEMP_MEAN = 19.0
 INIT_TEMP_STD = 0.1
 PREFER_TEMP_COMMON = 20.0
 NUM_GRID = 140
 BOX_SIZE = 10.0
 DEFFUSION_COEFF = 0.4
-DECAY_COEFF = 4.0
+DECAY_COEFF = 10.0
 TEMP_ROOM = -30.0
 
-init_penguin_positions = np.random.rand(NUM_PENGUINS, 2) * BOX_SIZE
+np.random.seed(SEED)
+DESITY_FACTOR = 1.0
+init_penguin_positions = (
+    (np.random.rand(NUM_PENGUINS, 2) - 0.5)
+    * DESITY_FACTOR
+    * np.sqrt(NUM_PENGUINS)
+    * PENGUIN_RADIUS
+) + BOX_SIZE / 2
 init_penguin_temps = np.random.normal(INIT_TEMP_MEAN, INIT_TEMP_STD, NUM_PENGUINS)
-init_air_temp = np.random.rand(NUM_GRID, NUM_GRID) * 10.0
+init_air_temp = np.full((NUM_GRID, NUM_GRID), TEMP_ROOM)
 
 init_penguin_infos = np.concatenate(
     [init_penguin_positions, init_penguin_temps[:, None]], axis=1
@@ -34,7 +42,8 @@ init_penguin_infos = np.concatenate(
 sim = PySimulation(
     init_penguins=init_penguin_infos,
     init_air_temp=init_air_temp,
-    penguin_max_vel=PENGUIN_MAX_VEL,
+    temp_drive_factor=TEMP_DRIVE_FACTOR,
+    colli_drive_factor=COLI_DRIVE_FACTOR,
     penguin_radius=PENGUIN_RADIUS,
     heat_gen_coeff=HEAT_GEN_COEFF,
     heat_p2e_coeff=HEAT_P2E_COEFF,
@@ -129,7 +138,8 @@ np.savez_compressed(
     params={
         "SEED": SEED,
         "NUM_PENGUINS": NUM_PENGUINS,
-        "PENGUIN_MAX_VEL": PENGUIN_MAX_VEL,
+        "TEMP_DRIVE_FACTOR": TEMP_DRIVE_FACTOR,
+        "COLI_DRIVE_FACTOR": COLI_DRIVE_FACTOR,
         "PENGUIN_RADIUS": PENGUIN_RADIUS,
         "HEAT_GEN_COEFF": HEAT_GEN_COEFF,
         "HEAT_P2E_COEFF": HEAT_P2E_COEFF,
