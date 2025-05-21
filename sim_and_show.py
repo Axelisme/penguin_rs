@@ -23,7 +23,13 @@ DECAY_COEFF = 4.0
 TEMP_ROOM = -30.0
 
 
-init_penguin_positions = np.random.rand(NUM_PENGUINS, 2) * BOX_SIZE
+DESITY_FACTOR = 1.5
+init_penguin_positions = (
+    (np.random.rand(NUM_PENGUINS, 2) - 0.5)
+    * DESITY_FACTOR
+    * np.sqrt(NUM_PENGUINS)
+    * PENGUIN_RADIUS
+) + BOX_SIZE / 2
 init_penguin_temps = np.random.normal(INIT_TEMP_MEAN, INIT_TEMP_STD, NUM_PENGUINS)
 init_air_temp = np.random.rand(NUM_GRID, NUM_GRID) * 10.0
 
