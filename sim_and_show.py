@@ -147,15 +147,23 @@ def update(frame):
     # quiver.set_UVC(vel_array[:, 0], vel_array[:, 1])
 
     # --- Update Color Limits Dynamically ---
-    air_min, air_max = np.min(air_temp_grid), np.max(air_temp_grid)
-    body_min, body_max = np.min(body_temps), np.max(body_temps)
+    air_min, air_mid, air_max = (
+        np.min(air_temp_grid),
+        np.median(air_temp_grid),
+        np.max(air_temp_grid),
+    )
+    body_min, body_mid, body_max = (
+        np.min(body_temps),
+        np.median(body_temps),
+        np.max(body_temps),
+    )
 
     # --- Update Title and Print Status ---
     current_sim_time = (frame + 1) * STEPS_PER_FRAME * DT
     frame_time = time.time() - start_frame_time
     title_text = (
         f"Penguin Sim - Time: {current_sim_time:.2f}s Frame: {frame}/{TOTAL_FRAMES} "
-        f"Body T: [{body_min:.2f}, {body_max:.2f}] Air T: [{air_min:.2f}, {air_max:.2f}] "
+        f"Body T: [{body_min:.2f}, {body_mid:.2f},{body_max:.2f}] Air T: [{air_min:.2f}, {air_mid:.2f},{air_max:.2f}] "
         f"(Frame time: {frame_time * 1000:.1f}ms)"
     )
     title.set_text(title_text)
