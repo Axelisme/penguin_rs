@@ -5,6 +5,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 from penguin_rs import PySimulation
 
+from util import (
+    calculate_penguin_density_by_temp,
+    calculate_temp_gradient_relationship,
+    calculate_temperature_stats,
+    create_penguin_colors,
+    create_title_text,
+    get_env_temps_at_positions,
+    update_axis_limits,
+    update_color_limits,
+)
+
 # Parameters based on main.rs
 SEED = 1
 NUM_PENGUINS = 500
@@ -83,82 +94,6 @@ positions_init, _, body_temps_init, air_temps_vec_init = sim.get_state()
 air_temp_grid_init = np.array(air_temps_vec_init).reshape((NUM_GRID, NUM_GRID))
 
 
-# Function to calculate temperature gradient
-def calculate_temperature_gradient(air_temp_grid):
-    """Calculate spatial temperature gradient magnitude"""
-    # Calculate gradients using numpy gradient
-    grad_x, grad_y = np.gradient(air_temp_grid)
-    # Calculate gradient magnitude
-    gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-    return gradient_magnitude
-
-
-# Function to calculate smoothed gradient for temperature ranges
-def calculate_temp_gradient_relationship(air_temp_grid, smooth_range=0.1, num_bins=50):
-    """Calculate relationship between temperature and average gradient with smoothing"""
-    gradient_magnitude = calculate_temperature_gradient(air_temp_grid)
-
-    # Get temperature range
-    temp_min, temp_max = np.min(air_temp_grid), np.max(air_temp_grid)
-    temp_range = np.linspace(temp_min, temp_max, num_bins)
-
-    avg_gradients = []
-
-    for target_temp in temp_range:
-        # Create mask for temperatures within smooth_range of target_temp
-        temp_mask = np.abs(air_temp_grid - target_temp) <= smooth_range
-
-        if np.any(temp_mask):
-            # Calculate average gradient for this temperature range
-            avg_gradient = np.mean(gradient_magnitude[temp_mask])
-        else:
-            avg_gradient = 0.0
-
-        avg_gradients.append(avg_gradient)
-
-    return temp_range, np.array(avg_gradients)
-
-
-# Function to calculate penguin density at different temperatures
-def calculate_penguin_density_by_temp(
-    positions, air_temp_grid, temp_range=None, num_bins=50
-):
-    """Calculate penguin density at different temperature ranges"""
-    if temp_range is None:
-        temp_min, temp_max = np.min(air_temp_grid), np.max(air_temp_grid)
-        temp_range = np.linspace(temp_min, temp_max, num_bins)
-
-    densities = []
-    grid_cell_area = (BOX_SIZE / NUM_GRID) ** 2  # Area of each grid cell
-
-    for target_temp in temp_range:
-        # Create mask for grid cells within temperature range (±0.5°C)
-        temp_tolerance = 0.5
-        temp_mask = np.abs(air_temp_grid - target_temp) <= temp_tolerance
-
-        if np.any(temp_mask):
-            # Count penguins in these temperature zones
-            penguin_count = 0
-            total_area = np.sum(temp_mask) * grid_cell_area
-
-            for pos in positions:
-                # Convert position to grid indices
-                i = int(np.clip(pos[0] / BOX_SIZE * NUM_GRID, 0, NUM_GRID - 1))
-                j = int(np.clip(pos[1] / BOX_SIZE * NUM_GRID, 0, NUM_GRID - 1))
-
-                if temp_mask[i, j]:
-                    penguin_count += 1
-
-            # Calculate density (penguins per unit area)
-            density = penguin_count / total_area if total_area > 0 else 0.0
-        else:
-            density = 0.0
-
-        densities.append(density)
-
-    return temp_range, np.array(densities)
-
-
 # Calculate initial temperature-gradient relationship
 temp_range_init, avg_gradients_init = calculate_temp_gradient_relationship(
     air_temp_grid_init
@@ -166,29 +101,16 @@ temp_range_init, avg_gradients_init = calculate_temp_gradient_relationship(
 
 # Calculate initial penguin density by temperature
 temp_range_density_init, densities_init = calculate_penguin_density_by_temp(
-    positions_init, air_temp_grid_init
+    positions_init, air_temp_grid_init, BOX_SIZE, NUM_GRID
 )
 
-
 # Calculate initial environmental temperatures at penguin positions
-def get_env_temps_at_positions(positions, air_temp_grid):
-    """Get environmental temperature at each penguin position"""
-    env_temps = []
-    for pos in positions:
-        # Convert position to grid indices
-        i = int(np.clip(pos[0] / BOX_SIZE * NUM_GRID + 0.5, 0, NUM_GRID - 1))
-        j = int(np.clip(pos[1] / BOX_SIZE * NUM_GRID + 0.5, 0, NUM_GRID - 1))
-        temp = np.mean(air_temp_grid[i - 1 : i + 2, j - 1 : j + 2])
-        env_temps.append(temp)
-    return np.array(env_temps)
-
-
-env_temps_init = get_env_temps_at_positions(positions_init, air_temp_grid_init)
+env_temps_init = get_env_temps_at_positions(
+    positions_init, air_temp_grid_init, BOX_SIZE, NUM_GRID
+)
 
 # Create binary colors based on temperature preference
-penguin_colors_init = [
-    "white" if temp > PREFER_TEMP_COMMON else "black" for temp in body_temps_init
-]
+penguin_colors_init = create_penguin_colors(body_temps_init, PREFER_TEMP_COMMON)
 
 # Left subplot: Body temperature vs Environmental temperature scatter plot
 scatter_temp = ax_scatter.scatter(
@@ -285,12 +207,10 @@ def update(frame):
     air_temp_grid = np.array(air_temps_vec).reshape((NUM_GRID, NUM_GRID))
 
     # Create binary colors based on temperature preference
-    penguin_colors = [
-        "white" if temp > PREFER_TEMP_COMMON else "black" for temp in body_temps
-    ]
+    penguin_colors = create_penguin_colors(body_temps, PREFER_TEMP_COMMON)
 
     # Calculate environmental temperatures at current penguin positions
-    env_temps = get_env_temps_at_positions(positions, air_temp_grid)
+    env_temps = get_env_temps_at_positions(positions, air_temp_grid, BOX_SIZE, NUM_GRID)
 
     # --- Update Plot Data ---
     # Update main simulation view
@@ -308,41 +228,24 @@ def update(frame):
 
     # Update density plot
     temp_range_density, densities = calculate_penguin_density_by_temp(
-        positions, air_temp_grid
+        positions, air_temp_grid, BOX_SIZE, NUM_GRID
     )
     density_line.set_data(temp_range_density, densities)
 
     # Update gradient plot limits
     if len(avg_gradients) > 0:
         ax_gradient.set_xlim(np.min(temp_range), np.max(temp_range))
-        gradient_min, gradient_max = (np.min(avg_gradients), np.max(avg_gradients))
-        if gradient_min != gradient_max:
-            gradient_pad = (gradient_max - gradient_min) * 0.1
-            ax_gradient.set_ylim(
-                gradient_min - gradient_pad, gradient_max + gradient_pad
-            )
+        update_axis_limits(ax_gradient, avg_gradients)
 
     # Update density plot limits
     if len(densities) > 0:
         ax_density.set_xlim(np.min(temp_range_density), np.max(temp_range_density))
-        density_min, density_max = (np.min(densities), np.max(densities))
-        if density_min != density_max:
-            density_pad = (density_max - density_min) * 0.1
-            ax_density.set_ylim(density_min - density_pad, density_max + density_pad)
-        else:
-            ax_density.set_ylim(0, max(1, density_max * 1.1))
+        update_axis_limits(ax_density, densities)
 
     # --- Update Color Limits Dynamically ---
-    air_min, air_mid, air_max = (
-        np.min(air_temp_grid),
-        np.median(air_temp_grid),
-        np.max(air_temp_grid),
-    )
-    body_min, body_mid, body_max = (
-        np.min(body_temps),
-        np.median(body_temps),
-        np.max(body_temps),
-    )
+    air_stats, body_stats = calculate_temperature_stats(air_temp_grid, body_temps)
+    air_min, air_mid, air_max = air_stats
+    body_min, body_mid, body_max = body_stats
 
     ax_scatter.set_xlim(body_min - 1, body_max + 1)
     ax_scatter.set_ylim(air_min - 1, air_max + 1)
@@ -351,19 +254,14 @@ def update(frame):
     current_sim_time = (frame + 1) * STEPS_PER_FRAME * DT
     frame_time = time.time() - start_frame_time
 
-    title_text = (
-        f"Penguin Sim - Time: {current_sim_time:.2f}s Frame: {frame}/{TOTAL_FRAMES} "
-        f"Body T: [{body_min:.2f}, {body_mid:.2f},{body_max:.2f}] "
-        f"Air T: [{air_min:.2f}, {air_mid:.2f},{air_max:.2f}] "
-        f"(Frame time: {frame_time * 1000:.1f}ms)"
+    # Create title text with frame time included
+    base_title = create_title_text(
+        current_sim_time, frame, TOTAL_FRAMES, air_stats, body_stats
     )
+    title_text = f"{base_title} (Frame time: {frame_time * 1000:.1f}ms)"
     title.set_text(title_text)
 
-    if air_min == air_max:
-        air_min -= 0.5
-        air_max += 0.5
-    im_pad = (air_max - air_min) * 0.1
-    im.set_clim(vmin=air_min - im_pad, vmax=air_max + im_pad)
+    update_color_limits(im, air_temp_grid)
 
     print(f"\r{title_text}", end="\r")
 
