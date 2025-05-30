@@ -11,7 +11,7 @@ class PySimulation:
         self,
         init_penguins: np.ndarray[np.float64, np.ndim[2]],
         init_air_temp: np.ndarray[np.float64, np.ndim[2]],
-        penguin_max_vel: float,
+        penguin_move_factor: float,
         penguin_radius: float,
         heat_gen_coeff: float,
         heat_p2e_coeff: float,
@@ -21,6 +21,7 @@ class PySimulation:
         deffusion_coeff: float,
         decay_coeff: float,
         temp_room: float,
+        enable_collision: bool,
     ) -> None: ...
     """
     初始化模擬器。

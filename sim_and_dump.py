@@ -8,23 +8,30 @@ from tqdm.auto import tqdm
 # Parameters based on main.rs
 SEED = 1
 NUM_PENGUINS = 500
-PENGUIN_MAX_VEL = 2.0
+PENGUIN_MOVE_FACTOR = 0.05
 PENGUIN_RADIUS = 0.1
-HEAT_GEN_COEFF = 1.1
-HEAT_P2E_COEFF = 10.0
-HEAT_E2P_COEFF = 0.1
-INIT_TEMP_MEAN = 19.0
-INIT_TEMP_STD = 0.1
+HEAT_GEN_COEFF = 0.15
+HEAT_P2E_COEFF = 1.0
+HEAT_E2P_COEFF = 0.01
 PREFER_TEMP_COMMON = 20.0
-NUM_GRID = 140
-BOX_SIZE = 10.0
+INIT_TEMP_MEAN = PREFER_TEMP_COMMON
+NUM_GRID = 180
+BOX_SIZE = 9.0
 DEFFUSION_COEFF = 0.4
-DECAY_COEFF = 4.0
+DECAY_COEFF = 0.4
 TEMP_ROOM = -30.0
+ENABLE_COLLISION = True
 
-init_penguin_positions = np.random.rand(NUM_PENGUINS, 2) * BOX_SIZE
-init_penguin_temps = np.random.normal(INIT_TEMP_MEAN, INIT_TEMP_STD, NUM_PENGUINS)
-init_air_temp = np.random.rand(NUM_GRID, NUM_GRID) * 10.0
+
+DESITY_FACTOR = 2.0
+init_penguin_positions = (
+    (np.random.rand(NUM_PENGUINS, 2) - 0.5)
+    * DESITY_FACTOR
+    * np.sqrt(NUM_PENGUINS)
+    * PENGUIN_RADIUS
+) + BOX_SIZE / 2
+init_penguin_temps = np.full(NUM_PENGUINS, INIT_TEMP_MEAN)
+init_air_temp = np.full((NUM_GRID, NUM_GRID), 0.5 * (TEMP_ROOM + INIT_TEMP_MEAN))
 
 init_penguin_infos = np.concatenate(
     [init_penguin_positions, init_penguin_temps[:, None]], axis=1
@@ -34,7 +41,7 @@ init_penguin_infos = np.concatenate(
 sim = PySimulation(
     init_penguins=init_penguin_infos,
     init_air_temp=init_air_temp,
-    penguin_max_vel=PENGUIN_MAX_VEL,
+    penguin_move_factor=PENGUIN_MOVE_FACTOR,
     penguin_radius=PENGUIN_RADIUS,
     heat_gen_coeff=HEAT_GEN_COEFF,
     heat_p2e_coeff=HEAT_P2E_COEFF,
@@ -44,8 +51,8 @@ sim = PySimulation(
     deffusion_coeff=DEFFUSION_COEFF,
     decay_coeff=DECAY_COEFF,
     temp_room=TEMP_ROOM,
+    enable_collision=ENABLE_COLLISION,
 )
-
 
 # --- Plotting Parameters ---
 SIM_TIME = 200.0
@@ -129,13 +136,12 @@ np.savez_compressed(
     params={
         "SEED": SEED,
         "NUM_PENGUINS": NUM_PENGUINS,
-        "PENGUIN_MAX_VEL": PENGUIN_MAX_VEL,
+        "PENGUIN_MOVE_FACTOR": PENGUIN_MOVE_FACTOR,
         "PENGUIN_RADIUS": PENGUIN_RADIUS,
         "HEAT_GEN_COEFF": HEAT_GEN_COEFF,
         "HEAT_P2E_COEFF": HEAT_P2E_COEFF,
         "HEAT_E2P_COEFF": HEAT_E2P_COEFF,
         "INIT_TEMP_MEAN": INIT_TEMP_MEAN,
-        "INIT_TEMP_STD": INIT_TEMP_STD,
         "PREFER_TEMP_COMMON": PREFER_TEMP_COMMON,
         "NUM_GRID": NUM_GRID,
         "BOX_SIZE": BOX_SIZE,

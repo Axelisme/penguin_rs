@@ -16,7 +16,7 @@ impl PySimulation {
     fn new(
         init_penguins: PyReadonlyArray2<f64>,
         init_air_temp: PyReadonlyArray2<f64>,
-        penguin_max_vel: f64,
+        penguin_move_factor: f64,
         penguin_radius: f64,
         heat_gen_coeff: f64,
         heat_p2e_coeff: f64,
@@ -26,13 +26,15 @@ impl PySimulation {
         deffusion_coeff: f64,
         decay_coeff: f64,
         temp_room: f64,
+        enable_collision: bool,
     ) -> PyResult<Self> {
         let config = SimulationConfig::new(
-            penguin_max_vel,
+            penguin_move_factor,
             penguin_radius,
             heat_gen_coeff,
             heat_p2e_coeff,
             heat_e2p_coeff,
+            enable_collision,
         );
 
         let init_penguins_arr = init_penguins.as_array();

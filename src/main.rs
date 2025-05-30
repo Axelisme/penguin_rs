@@ -24,8 +24,16 @@ fn main() {
     const T_BODY_STD: f64 = 0.1;
     const T_PREFER_COMMON: f64 = 20.0;
     const M: usize = 120;
+    const ENABLE_COLLISION: bool = true;
 
-    let sim_config = SimulationConfig::new(V0, COLL_R, GEN_COEFF, P2E_COEFF, E2P_COEFF);
+    let sim_config = SimulationConfig::new(
+        V0,
+        COLL_R,
+        GEN_COEFF,
+        P2E_COEFF,
+        E2P_COEFF,
+        ENABLE_COLLISION,
+    );
 
     // init penguins
     let mut rng = StdRng::seed_from_u64(0);
