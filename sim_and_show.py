@@ -7,6 +7,7 @@ from penguin_rs import PySimulation
 
 from util import (
     calculate_penguin_density_by_temp,
+    calculate_stable_temp,
     calculate_temp_gradient_relationship,
     calculate_temperature_stats,
     create_penguin_colors,
@@ -22,17 +23,29 @@ NUM_PENGUINS = 500
 PENGUIN_MOVE_FACTOR = 0.05
 PENGUIN_RADIUS = 0.1
 HEAT_GEN_COEFF = 0.15
-HEAT_P2E_COEFF = 1.0
-HEAT_E2P_COEFF = 0.01
-PREFER_TEMP_COMMON = 20.0
-INIT_TEMP_MEAN = PREFER_TEMP_COMMON
+HEAT_P2E_COEFF = 100.0
+HEAT_E2P_COEFF = 1.0
+PREFER_TEMP_COMMON = 27.0
+INIT_TEMP_MEAN = PREFER_TEMP_COMMON - 3
 NUM_GRID = 180
 BOX_SIZE = 9.0
-DEFFUSION_COEFF = 0.4
-DECAY_COEFF = 0.4
+DIFFUSION_COEFF = 0.4
+DECAY_COEFF = 0.5
 TEMP_ROOM = -30.0
 ENABLE_COLLISION = True
 
+print(
+    calculate_stable_temp(
+        HEAT_GEN_COEFF,
+        HEAT_E2P_COEFF,
+        DIFFUSION_COEFF,
+        HEAT_P2E_COEFF,
+        PENGUIN_RADIUS,
+        DECAY_COEFF,
+        TEMP_ROOM,
+    )
+)
+# exit()
 
 DESITY_FACTOR = 2.0
 init_penguin_positions = (
@@ -59,7 +72,7 @@ sim = PySimulation(
     heat_e2p_coeff=HEAT_E2P_COEFF,
     prefer_temp_common=PREFER_TEMP_COMMON,
     box_size=BOX_SIZE,
-    deffusion_coeff=DEFFUSION_COEFF,
+    diffusion_coeff=DIFFUSION_COEFF,
     decay_coeff=DECAY_COEFF,
     temp_room=TEMP_ROOM,
     enable_collision=ENABLE_COLLISION,
