@@ -1,3 +1,3 @@
 pub mod simulator;
 
-pub use simulator::{AirTemp, Penguin, Simulation, SimulationConfig};
+pub use simulator::{AirTemp, Simulation, SimulationConfig};

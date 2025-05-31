@@ -1,28 +1,14 @@
 use ndarray::Array2;
 
-pub struct Penguin {
-    pub pos: [f64; 2],
-    pub vel: [f64; 2],
-    pub body_temp: f64,
-    pub prefer_temp: f64,
-}
-
-impl Penguin {
-    pub fn new(pos: [f64; 2], vel: [f64; 2], body_temp: f64, prefer_temp: f64) -> Self {
-        Self {
-            pos,
-            vel,
-            body_temp,
-            prefer_temp,
-        }
-    }
-}
+const MIN_GRADIENT_THRESHOLD: f64 = 1e-6;
+const MIN_DISTANCE_THRESHOLD: f64 = 1e-12;
+const HEAT_RADIUS_FACTOR: f64 = 5.0;
 
 pub struct AirTemp {
     pub temp: Array2<f64>,
     pub size_x: f64,
     pub size_y: f64,
-    pub deffusion_coeff: f64,
+    pub diffusion_coeff: f64,
     pub decay_coeff: f64,
     pub temp_room: f64,
 }
@@ -31,7 +17,7 @@ impl AirTemp {
     pub fn new(
         init_temp: Array2<f64>,
         box_size: f64,
-        deffusion_coeff: f64,
+        diffusion_coeff: f64,
         decay_coeff: f64,
         temp_room: f64,
     ) -> Self {
@@ -39,10 +25,19 @@ impl AirTemp {
             temp: init_temp,
             size_x: box_size,
             size_y: box_size,
-            deffusion_coeff,
+            diffusion_coeff,
             decay_coeff,
             temp_room,
         }
+    }
+
+    /// 計算擴散方程的穩定性條件：dt_max = min(Δx², Δy²) / (2 * D)
+    pub fn get_max_stable_dt(&self) -> f64 {
+        let (nx, ny) = self.temp.dim();
+        let grid_x = self.size_x / nx as f64;
+        let grid_y = self.size_y / ny as f64;
+        let min_grid_sq = (grid_x * grid_x).min(grid_y * grid_y);
+        min_grid_sq / (4.0 * self.diffusion_coeff)
     }
 
     pub fn idx2pos(&self, i: usize, j: usize) -> [f64; 2] {
@@ -74,59 +69,57 @@ impl AirTemp {
         let (nx, ny) = self.temp.dim();
         let grid_x = self.size_x / nx as f64;
         let grid_y = self.size_y / ny as f64;
-
         let (i, j) = self.pos2idx(pos);
 
-        // Clamp indices to avoid out-of-bounds
         let i_left = (i + nx - 1) % nx;
         let i_right = (i + 1) % nx;
         let j_down = (j + ny - 1) % ny;
         let j_up = (j + 1) % ny;
 
-        let t_left = self.temp[(i_left, j)];
-        let t_right = self.temp[(i_right, j)];
-        let t_down = self.temp[(i, j_down)];
-        let t_up = self.temp[(i, j_up)];
-
-        let grad_x = (t_right - t_left) / (2. * grid_x);
-        let grad_y = (t_up - t_down) / (2. * grid_y);
+        let grad_x = (self.temp[(i_right, j)] - self.temp[(i_left, j)]) / (2.0 * grid_x);
+        let grad_y = (self.temp[(i, j_up)] - self.temp[(i, j_down)]) / (2.0 * grid_y);
 
         [grad_x, grad_y]
     }
 
-    pub fn get_derive(&self, heat_src: Array2<f64>) -> Array2<f64> {
+    pub fn get_derivative(&self, heat_src: Array2<f64>) -> Array2<f64> {
+        let laplacian = self.compute_laplacian();
+        heat_src + self.diffusion_coeff * laplacian
+            - self.decay_coeff * (self.temp.clone() - self.temp_room)
+    }
+
+    fn compute_laplacian(&self) -> Array2<f64> {
         let (nx, ny) = self.temp.dim();
         let grid_x = self.size_x / nx as f64;
         let grid_y = self.size_y / ny as f64;
+        let mut laplacian = Array2::<f64>::zeros(self.temp.dim());
 
-        let laplacian = {
-            let mut laplacian = Array2::<f64>::zeros(self.temp.dim());
-            for i in 0..nx {
-                for j in 0..ny {
-                    let t_center = self.temp[(i, j)];
-                    let t_left = self.temp[(i, (j + ny - 1) % ny)];
-                    let t_right = self.temp[(i, (j + 1) % ny)];
-                    let t_down = self.temp[((i + nx - 1) % nx, j)];
-                    let t_up = self.temp[((i + 1) % nx, j)];
-                    laplacian[(i, j)] =
-                        (t_left + t_right + t_up + t_down - 4.0 * t_center) / (grid_x * grid_y);
-                }
+        for i in 0..nx {
+            for j in 0..ny {
+                let t_center = self.temp[(i, j)];
+                let t_left = self.temp[(i, (j + ny - 1) % ny)];
+                let t_right = self.temp[(i, (j + 1) % ny)];
+                let t_down = self.temp[((i + nx - 1) % nx, j)];
+                let t_up = self.temp[((i + 1) % nx, j)];
+
+                // 正确的二維拉普拉斯算子：∇²T = ∂²T/∂x² + ∂²T/∂y²
+                let d2_dx2 = (t_left + t_right - 2.0 * t_center) / (grid_x * grid_x);
+                let d2_dy2 = (t_down + t_up - 2.0 * t_center) / (grid_y * grid_y);
+                laplacian[(i, j)] = d2_dx2 + d2_dy2;
             }
-            laplacian
-        };
-
-        return heat_src + self.deffusion_coeff * laplacian
-            - self.decay_coeff * (self.temp.clone() - self.temp_room);
+        }
+        laplacian
     }
 }
 
+#[derive(Clone)]
 pub struct SimulationConfig {
-    penguin_move_factor: f64,
-    penguin_radius: f64,
-    heat_gen_coeff: f64,
-    heat_p2e_coeff: f64,
-    heat_e2p_coeff: f64,
-    enable_collision: bool,
+    pub penguin_move_factor: f64,
+    pub penguin_radius: f64,
+    pub heat_gen_coeff: f64,
+    pub heat_p2e_coeff: f64,
+    pub heat_e2p_coeff: f64,
+    pub collision_strength: f64,
 }
 
 impl SimulationConfig {
@@ -136,7 +129,7 @@ impl SimulationConfig {
         heat_gen_coeff: f64,
         heat_p2e_coeff: f64,
         heat_e2p_coeff: f64,
-        enable_collision: bool,
+        collision_strength: f64,
     ) -> Self {
         Self {
             penguin_move_factor,
@@ -144,206 +137,260 @@ impl SimulationConfig {
             heat_gen_coeff,
             heat_p2e_coeff,
             heat_e2p_coeff,
-            enable_collision,
+            collision_strength,
         }
     }
 }
 
 pub struct Simulation {
     pub config: SimulationConfig,
-    pub penguins: Vec<Penguin>,
+    pub positions: Vec<[f64; 2]>,
+    pub velocities: Vec<[f64; 2]>,
+    pub body_temps: Vec<f64>,
+    pub prefer_temps: Vec<f64>,
     pub air: AirTemp,
 }
 
 impl Simulation {
     pub fn new(
         config: SimulationConfig,
-        init_penguins: Vec<Penguin>,
-        init_air_temp: AirTemp,
+        positions: Vec<[f64; 2]>,
+        velocities: Vec<[f64; 2]>,
+        body_temps: Vec<f64>,
+        prefer_temps: Vec<f64>,
+        air: AirTemp,
     ) -> Self {
         Self {
             config,
-            penguins: init_penguins,
-            air: init_air_temp,
+            positions,
+            velocities,
+            body_temps,
+            prefer_temps,
+            air,
         }
     }
 
-    fn get_derive(&self) -> (Vec<f64>, Array2<f64>, Vec<[f64; 2]>) {
-        let t_airs = self
-            .penguins
-            .iter()
-            .map(|p| self.air.get_temp(p.pos))
-            .collect::<Vec<_>>();
-
-        // heat env->penguin
-        let gen_coeff = self.config.heat_gen_coeff;
-        let e2p_coeff = self.config.heat_e2p_coeff;
-        let derive_body_temps = self
-            .penguins
-            .iter()
-            .zip(t_airs.iter())
-            .map(|(p, t_air)| gen_coeff - e2p_coeff * (p.body_temp - t_air))
-            .collect::<Vec<_>>();
-
-        // heat penguin->env
-        let derive_air_temp = {
-            let heat_r = self.config.penguin_radius;
-            let p2e_coeff = self.config.heat_p2e_coeff;
-
-            let mut heat_src = Array2::<f64>::zeros(self.air.temp.dim());
-            let (nx, ny) = self.air.temp.dim();
-            let grid_x = self.air.size_x / nx as f64;
-            let grid_y = self.air.size_y / ny as f64;
-            let x_num = (5. * heat_r / grid_x).ceil() as i32;
-            let y_num = (5. * heat_r / grid_y).ceil() as i32;
-            self.penguins
-                .iter()
-                .zip(t_airs.iter())
-                .for_each(|(p, t_air)| {
-                    let [x, y] = p.pos;
-
-                    let (i, j) = self.air.pos2idx(p.pos);
-                    for di in -x_num..=x_num {
-                        for dj in -y_num..=y_num {
-                            let gi = (i as i32 + di + nx as i32) as usize % nx;
-                            let gj = (j as i32 + dj + ny as i32) as usize % ny;
-                            let [gx, gy] = self.air.idx2pos(gi, gj);
-                            let dist2 = (gx - x) * (gx - x) + (gy - y) * (gy - y);
-                            heat_src[(gi, gj)] += p2e_coeff
-                                * (p.body_temp - t_air)
-                                * (-0.5 * dist2 / (heat_r * heat_r)).exp();
-                        }
-                    }
-                });
-            self.air.get_derive(heat_src)
-        };
-
-        // compute velocities based on temperature gradient
-        let vel_factor = self.config.penguin_move_factor;
-        let velocities = self
-            .penguins
-            .iter()
-            .enumerate()
-            .map(|(_, p)| {
-                let [gx, gy] = self.air.get_grad(p.pos);
-                let g_norm = (gx * gx + gy * gy).sqrt();
-                if g_norm > 1e-6 {
-                    let speed = vel_factor * (p.body_temp - p.prefer_temp);
-                    [-speed * gx, -speed * gy]
-                } else {
-                    return [0., 0.];
-                }
-            })
-            .collect::<Vec<_>>();
-
-        (derive_body_temps, derive_air_temp, velocities)
+    pub fn num_penguins(&self) -> usize {
+        self.positions.len()
     }
 
-    fn apply_colli(&self, positions: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
-        // Optimized brute force collision detection
-        let colli_dist = 2.0 * self.config.penguin_radius;
-        let colli_dist_sq = colli_dist * colli_dist;
-        let n = positions.len();
+    pub fn step(&mut self, dt: f64) {
+        self.step_euler(dt);
+    }
 
-        // Pre-allocate correction vectors for better performance
-        let mut corrections = vec![[0.0; 2]; n];
+    pub fn step_euler(&mut self, dt: f64) {
+        // 計算氣溫更新需要的子步驟數量
+        let max_stable_dt = self.air.get_max_stable_dt();
+        let air_sub_steps = if dt > max_stable_dt {
+            (dt / max_stable_dt).ceil() as usize
+        } else {
+            1
+        };
+        let air_dt = dt / air_sub_steps as f64;
 
-        // Brute force collision detection with optimizations
-        for i in 0..n {
-            for j in (i + 1)..n {
-                // Calculate distance vector
-                let dx = positions[i][0] - positions[j][0];
-                let dy = positions[i][1] - positions[j][1];
-                let dist_sq = dx * dx + dy * dy;
+        // 計算當前狀態的導數
+        let air_temps = self
+            .positions
+            .iter()
+            .map(|pos| self.air.get_temp(*pos))
+            .collect::<Vec<_>>();
 
-                // Early exit if no collision or same position
-                if dist_sq >= colli_dist_sq || dist_sq < 1e-12 {
-                    continue;
-                }
+        // 更新企鵝體溫（一次性）
+        let body_temp_derivatives =
+            self.compute_body_temp_derivatives(&self.body_temps, &air_temps);
+        for (body_temp, derivative) in self.body_temps.iter_mut().zip(body_temp_derivatives.iter())
+        {
+            *body_temp += derivative * dt;
+        }
 
-                // Calculate collision response
-                let dist = dist_sq.sqrt();
-                let overlap = colli_dist - dist;
-                let correction_magnitude = 0.5 * overlap / dist;
+        // 計算基本速度（溫度梯度驅動）
+        let mut velocities = self.compute_velocities(
+            &self.positions,
+            &self.body_temps,
+            &self.prefer_temps,
+            &self.air,
+        );
 
-                // Apply correction forces
-                let correction_x = correction_magnitude * dx;
-                let correction_y = correction_magnitude * dy;
-
-                // Penguin i gets pushed away from j
-                corrections[i][0] += correction_x;
-                corrections[i][1] += correction_y;
-
-                // Penguin j gets pushed away from i
-                corrections[j][0] -= correction_x;
-                corrections[j][1] -= correction_y;
+        // 添加碰撞排斥速度
+        if self.config.collision_strength > 0.0 {
+            let collision_velocities = self.compute_collision_repulsion(&self.positions);
+            for (v, cv) in velocities.iter_mut().zip(collision_velocities.iter()) {
+                v[0] += cv[0];
+                v[1] += cv[1];
             }
         }
 
-        // Apply corrections and boundary conditions
-        positions
+        self.velocities = velocities.clone();
+
+        // 更新位置（使用修正後的速度）
+        self.positions = self
+            .positions
             .iter()
-            .zip(corrections.iter())
-            .map(|(pos, correction)| {
-                let new_x = pos[0] + correction[0];
-                let new_y = pos[1] + correction[1];
+            .zip(velocities.iter())
+            .map(|(pos, v)| {
                 [
-                    new_x.rem_euclid(self.air.size_x),
-                    new_y.rem_euclid(self.air.size_y),
+                    (pos[0] + v[0] * dt).rem_euclid(self.air.size_x),
+                    (pos[1] + v[1] * dt).rem_euclid(self.air.size_y),
                 ]
+            })
+            .collect();
+
+        // 分子步驟更新氣溫
+        for _ in 0..air_sub_steps {
+            let air_temps = self
+                .positions
+                .iter()
+                .map(|pos| self.air.get_temp(*pos))
+                .collect::<Vec<_>>();
+
+            let air_temp_derivative = self.compute_air_temp_derivative(
+                &self.positions,
+                &self.body_temps,
+                &air_temps,
+                &self.air,
+            );
+
+            self.air.temp = &self.air.temp + &(&air_temp_derivative * air_dt);
+        }
+    }
+
+    fn compute_body_temp_derivatives(&self, body_temps: &[f64], air_temps: &[f64]) -> Vec<f64> {
+        body_temps
+            .iter()
+            .zip(air_temps.iter())
+            .map(|(body_temp, air_temp)| {
+                self.config.heat_gen_coeff - self.config.heat_e2p_coeff * (body_temp - air_temp)
             })
             .collect()
     }
 
-    fn apply_colli_and_update(
+    fn compute_air_temp_derivative(
         &self,
-        positions: Vec<[f64; 2]>,
-        velocities: Vec<[f64; 2]>,
-        dt: f64,
-    ) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
-        // Update positions based on new velocities
-        let mut positions = positions
-            .iter()
-            .zip(velocities.iter())
-            .map(|(p, v)| [p[0] + v[0] * dt, p[1] + v[1] * dt])
-            .collect::<Vec<_>>();
-
-        // Apply boundary conditions
-        positions.iter_mut().for_each(|pos| {
-            pos[0] = pos[0].rem_euclid(self.air.size_x);
-            pos[1] = pos[1].rem_euclid(self.air.size_y);
-        });
-
-        positions = if self.config.enable_collision {
-            self.apply_colli(positions)
-        } else {
-            positions
-        };
-        (positions, velocities)
+        positions: &[[f64; 2]],
+        body_temps: &[f64],
+        air_temps: &[f64],
+        temp_air: &AirTemp,
+    ) -> Array2<f64> {
+        let heat_src = self.compute_heat_source(positions, body_temps, air_temps, temp_air);
+        temp_air.get_derivative(heat_src)
     }
 
-    pub fn step(&mut self, dt: f64) {
-        // get derivatives
-        let (derive_body_temps, derive_air_temp, velocities) = self.get_derive();
+    fn compute_heat_source(
+        &self,
+        positions: &[[f64; 2]],
+        body_temps: &[f64],
+        air_temps: &[f64],
+        temp_air: &AirTemp,
+    ) -> Array2<f64> {
+        let mut heat_src = Array2::<f64>::zeros(temp_air.temp.dim());
+        let (nx, ny) = temp_air.temp.dim();
+        let grid_x = temp_air.size_x / nx as f64;
+        let grid_y = temp_air.size_y / ny as f64;
+        let heat_radius = self.config.penguin_radius;
 
-        // apply collision and update positions
-        let positions = self.penguins.iter().map(|p| p.pos).collect::<Vec<_>>();
-        let (new_positions, velocities) = self.apply_colli_and_update(positions, velocities, dt);
+        let x_range = (HEAT_RADIUS_FACTOR * heat_radius / grid_x).ceil() as i32;
+        let y_range = (HEAT_RADIUS_FACTOR * heat_radius / grid_y).ceil() as i32;
 
-        // update penguin info
-        self.penguins.iter_mut().enumerate().for_each(|(i, p)| {
-            p.pos = new_positions[i];
-            p.vel = velocities[i];
-            p.body_temp = derive_body_temps[i] * dt + p.body_temp;
-        });
+        for ((pos, body_temp), air_temp) in positions
+            .iter()
+            .zip(body_temps.iter())
+            .zip(air_temps.iter())
+        {
+            let (i, j) = temp_air.pos2idx(*pos);
 
-        // update air temp
-        self.air
-            .temp
-            .iter_mut()
-            .zip(derive_air_temp.iter())
-            .for_each(|(t, derive_air_temp)| {
-                *t += *derive_air_temp * dt;
-            });
+            for di in -x_range..=x_range {
+                for dj in -y_range..=y_range {
+                    let gi = (i as i32 + di + nx as i32) as usize % nx;
+                    let gj = (j as i32 + dj + ny as i32) as usize % ny;
+                    let grid_pos = temp_air.idx2pos(gi, gj);
+                    let dist_sq = Self::distance_squared(pos, &grid_pos);
+
+                    heat_src[(gi, gj)] += self.config.heat_p2e_coeff
+                        * (body_temp - air_temp)
+                        * (-0.5 * dist_sq / (heat_radius * heat_radius)).exp();
+                }
+            }
+        }
+        heat_src
+    }
+
+    fn compute_velocities(
+        &self,
+        positions: &[[f64; 2]],
+        body_temps: &[f64],
+        prefer_temps: &[f64],
+        temp_air: &AirTemp,
+    ) -> Vec<[f64; 2]> {
+        positions
+            .iter()
+            .zip(body_temps.iter())
+            .zip(prefer_temps.iter())
+            .map(|((pos, body_temp), prefer_temp)| {
+                let grad = temp_air.get_grad(*pos);
+                let grad_magnitude = Self::vector_magnitude(&grad);
+
+                if grad_magnitude > MIN_GRADIENT_THRESHOLD {
+                    let speed = self.config.penguin_move_factor * (body_temp - prefer_temp);
+                    [-speed * grad[0], -speed * grad[1]]
+                } else {
+                    [0.0, 0.0]
+                }
+            })
+            .collect()
+    }
+
+    fn compute_collision_repulsion(&self, positions: &[[f64; 2]]) -> Vec<[f64; 2]> {
+        let n = positions.len();
+        let mut repulsion_velocities = vec![[0.0; 2]; n];
+
+        let interaction_radius = 3.0 * self.config.penguin_radius; // 交互半径
+        let sigma = self.config.penguin_radius; // 高斯分布的標準差
+
+        for i in 0..n {
+            for j in 0..n {
+                if i == j {
+                    continue;
+                }
+
+                let distance_vec = [
+                    positions[i][0] - positions[j][0],
+                    positions[i][1] - positions[j][1],
+                ];
+                let distance_sq = Self::vector_magnitude_squared(&distance_vec);
+                let distance = distance_sq.sqrt();
+
+                if distance > interaction_radius || distance < MIN_DISTANCE_THRESHOLD {
+                    continue;
+                }
+
+                // 高斯分布的排斥力強度：exp(-d²/(2σ²))
+                let gaussian_factor = (-distance_sq / (2.0 * sigma * sigma)).exp();
+                let repulsion_strength = self.config.collision_strength * gaussian_factor;
+
+                // 計算單位方向向量
+                let unit_vec = [distance_vec[0] / distance, distance_vec[1] / distance];
+
+                // 添加排斥速度
+                repulsion_velocities[i][0] += repulsion_strength * unit_vec[0];
+                repulsion_velocities[i][1] += repulsion_strength * unit_vec[1];
+            }
+        }
+
+        repulsion_velocities
+    }
+
+    // Utility functions
+    fn distance_squared(pos1: &[f64; 2], pos2: &[f64; 2]) -> f64 {
+        let dx = pos1[0] - pos2[0];
+        let dy = pos1[1] - pos2[1];
+        dx * dx + dy * dy
+    }
+
+    fn vector_magnitude(v: &[f64; 2]) -> f64 {
+        (v[0] * v[0] + v[1] * v[1]).sqrt()
+    }
+
+    fn vector_magnitude_squared(v: &[f64; 2]) -> f64 {
+        v[0] * v[0] + v[1] * v[1]
     }
 }

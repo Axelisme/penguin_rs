@@ -18,10 +18,10 @@ class PySimulation:
         heat_e2p_coeff: float,
         prefer_temp_common: float,
         box_size: float,
-        deffusion_coeff: float,
+        diffusion_coeff: float,
         decay_coeff: float,
         temp_room: float,
-        enable_collision: bool,
+        collision_strength: float,
     ) -> None: ...
     """
     初始化模擬器。

@@ -7,11 +7,13 @@ from penguin_rs import PySimulation
 
 from util import (
     calculate_penguin_density_by_temp,
+    calculate_stable_temp,
     calculate_temp_gradient_relationship,
     calculate_temperature_stats,
     create_penguin_colors,
     create_title_text,
     get_env_temps_at_positions,
+    update_axis_limits,
     update_color_limits,
 )
 
@@ -27,10 +29,23 @@ PREFER_TEMP_COMMON = 20.0
 INIT_TEMP_MEAN = PREFER_TEMP_COMMON
 NUM_GRID = 180
 BOX_SIZE = 9.0
-DEFFUSION_COEFF = 0.4
+DIFFUSION_COEFF = 0.4
 DECAY_COEFF = 0.4
 TEMP_ROOM = -30.0
-ENABLE_COLLISION = False
+COLLISION_STRENGTH = 10.0  # 碰撞排斥力强度
+
+print(
+    calculate_stable_temp(
+        HEAT_GEN_COEFF,
+        HEAT_E2P_COEFF,
+        DIFFUSION_COEFF,
+        HEAT_P2E_COEFF,
+        PENGUIN_RADIUS,
+        DECAY_COEFF,
+        TEMP_ROOM,
+    )
+)
+# exit()
 
 # Parameter mapping for theoretical model
 A = HEAT_GEN_COEFF
@@ -56,6 +71,7 @@ def density_factor(y):
 
 def H(density, grad):
     return -alpha * (1.0 - density) * grad**2
+    # return -alpha * grad**2
 
 
 def H_predict(x, y):
@@ -72,9 +88,6 @@ def theoretical_vector_field(x, y):
 def actual_vector_field(x, y, grad_temps, gradients, density_temps, densities):
     actual_grad = np.interp(y, grad_temps, gradients, left=0, right=0)
     actual_density = np.interp(y, density_temps, densities, left=0, right=0)
-
-    if not ENABLE_COLLISION:
-        actual_density = np.zeros_like(actual_density)
 
     dxdt = A - B * (x - y)
     dydt = (x - x0) * H(actual_density, actual_grad)
@@ -107,17 +120,17 @@ sim = PySimulation(
     heat_e2p_coeff=HEAT_E2P_COEFF,
     prefer_temp_common=PREFER_TEMP_COMMON,
     box_size=BOX_SIZE,
-    deffusion_coeff=DEFFUSION_COEFF,
+    diffusion_coeff=DIFFUSION_COEFF,
     decay_coeff=DECAY_COEFF,
     temp_room=TEMP_ROOM,
-    enable_collision=ENABLE_COLLISION,
+    collision_strength=COLLISION_STRENGTH,
 )
 
 # --- Plotting Parameters ---
 SIM_TIME = 100.0
-DT = 0.001
+DT = 0.003
 TOTAL_STEPS = int(SIM_TIME / DT)
-FRAMES_PER_SECOND = 100  # Target FPS for animation
+FRAMES_PER_SECOND = 10  # Target FPS for animation
 STEPS_PER_FRAME = max(1, int(1 / (FRAMES_PER_SECOND * DT)))
 TOTAL_FRAMES = int(TOTAL_STEPS / STEPS_PER_FRAME)
 
@@ -170,15 +183,30 @@ scatter_temp = ax_scatter.scatter(
 # Initialize vector field grid based on initial data range
 x_range = [body_temps.min() - 2, body_temps.max() + 2]
 y_range = [env_temps.min() - 2, env_temps.max() + 2]
-x_vec = np.linspace(x_range[0], x_range[1], 12)
-y_vec = np.linspace(y_range[0], y_range[1], 12)
+x_vec = np.linspace(x_range[0], x_range[1], 100)
+y_vec = np.linspace(y_range[0], y_range[1], 100)
 Xs, Ys = np.meshgrid(x_vec, y_vec)
 U_vec, V_vec = actual_vector_field(
     Xs, Ys, grad_temps, gradients, density_temps, densities
 )
 
-# Plot vector field
-quiver = ax_scatter.quiver(Xs, Ys, U_vec, V_vec, animated=True, scale=10, width=0.002)
+# Plot vector field (this will be recreated each frame)
+quiver = ax_scatter.quiver(
+    Xs[::10, ::10],
+    Ys[::10, ::10],
+    U_vec[::10, ::10],
+    V_vec[::10, ::10],
+    animated=True,
+    scale=10,
+    width=0.002,
+)
+
+
+# contour of dx/dt = 0 and dy/dt = 0
+dx_contour = ax_scatter.contour(
+    Xs, Ys, U_vec, levels=[0], colors="red", linestyles="--", alpha=0.8, linewidths=2
+)
+dy_contour = ax_scatter.axvline(PREFER_TEMP_COMMON, color="blue", alpha=0.8)
 
 
 # Right subplot: Main simulation view
@@ -219,8 +247,7 @@ scatter_main = ax_main.scatter(
 # Plot settings
 ax_scatter.set_xlabel("Body Temperature (°C)")
 ax_scatter.set_ylabel("Environmental Temperature (°C)")
-ax_scatter.set_title("Body vs Env Temp + Dynamic Vector Field")
-ax_scatter.axvline(x=PREFER_TEMP_COMMON, color="red", linestyle="--", alpha=0.7)
+ax_scatter.set_title("Body vs Env Temp + Dynamic Vector Field + Isoclines")
 
 ax_main.set_xlim(0, BOX_SIZE)
 ax_main.set_ylim(0, BOX_SIZE)
@@ -288,18 +315,61 @@ def update(frame):
     densities = np.clip(densities, 0, 1)
     density_line.set_data(density_temps, densities)
 
+    # Update gradient plot limits
     pred_gradients = grad_func(grad_temps)
     pred_densities = density_factor(density_temps)
     gradient_pred_line.set_data(grad_temps, pred_gradients)
     density_pred_line.set_data(density_temps, pred_densities)
 
+    update_axis_limits(ax_gradient, np.concatenate([gradients, pred_gradients]))
+    update_axis_limits(ax_density, np.concatenate([densities, pred_densities]))
+
+    # Dynamically update vector field grid based on current data range
+    x_range = [np.nanmin(body_temps) - 2, np.nanmax(body_temps) + 2]
+    y_range = [np.nanmin(env_temps) - 2, np.nanmax(env_temps) + 2]
+
+    # update scatter plot limits
+    ax_scatter.set_xlim(*x_range)
+    ax_scatter.set_ylim(*y_range)
+
     # Update vector field using actual computed gradients and densities
+    x_vec = np.linspace(x_range[0], x_range[1], 100)
+    y_vec = np.linspace(y_range[0], y_range[1], 100)
+    Xs, Ys = np.meshgrid(x_vec, y_vec)
     U_vec, V_vec = actual_vector_field(
         Xs, Ys, grad_temps, gradients, density_temps, densities
     )
 
     # Update quiver positions and vectors
-    quiver.set_UVC(U_vec, V_vec)
+    global quiver
+    quiver.remove()
+    quiver = ax_scatter.quiver(
+        Xs[::10, ::10],
+        Ys[::10, ::10],
+        U_vec[::10, ::10],
+        V_vec[::10, ::10],
+        animated=True,
+        scale=10,
+        width=0.002,
+    )
+
+    # update contour of dx/dt = 0 and dy/dt = 0
+
+    # contour of dx/dt = 0 and dy/dt = 0
+    global dx_contour, dy_contour
+    dx_contour.remove()
+    dy_contour.remove()
+    dx_contour = ax_scatter.contour(
+        Xs,
+        Ys,
+        U_vec,
+        levels=[0],
+        colors="red",
+        linestyles="--",
+        alpha=0.8,
+        linewidths=2,
+    )
+    dy_contour = ax_scatter.axvline(PREFER_TEMP_COMMON, color="blue", alpha=0.8)
 
     # Adjust quiver scale dynamically based on vector magnitude
     max_magnitude = np.sqrt(U_vec**2 + V_vec**2).max()
@@ -334,6 +404,8 @@ def update(frame):
         gradient_pred_line,
         density_pred_line,
         title,
+        dx_contour,
+        dy_contour,
     )
 
 

@@ -5,6 +5,8 @@ import numpy as np
 from penguin_rs import PySimulation
 from tqdm.auto import tqdm
 
+from util import calculate_stable_temp
+
 # Parameters based on main.rs
 SEED = 1
 NUM_PENGUINS = 500
@@ -14,13 +16,26 @@ HEAT_GEN_COEFF = 0.15
 HEAT_P2E_COEFF = 1.0
 HEAT_E2P_COEFF = 0.01
 PREFER_TEMP_COMMON = 20.0
-INIT_TEMP_MEAN = PREFER_TEMP_COMMON
+INIT_TEMP_MEAN = PREFER_TEMP_COMMON - 2
 NUM_GRID = 180
 BOX_SIZE = 9.0
-DEFFUSION_COEFF = 0.4
+DIFFUSION_COEFF = 0.4
 DECAY_COEFF = 0.4
 TEMP_ROOM = -30.0
-ENABLE_COLLISION = True
+COLLISION_STRENGTH = 10.0  # 碰撞排斥力强度
+
+print(
+    calculate_stable_temp(
+        HEAT_GEN_COEFF,
+        HEAT_E2P_COEFF,
+        DIFFUSION_COEFF,
+        HEAT_P2E_COEFF,
+        PENGUIN_RADIUS,
+        DECAY_COEFF,
+        TEMP_ROOM,
+    )
+)
+# exit()
 
 
 DESITY_FACTOR = 2.0
@@ -48,10 +63,10 @@ sim = PySimulation(
     heat_e2p_coeff=HEAT_E2P_COEFF,
     prefer_temp_common=PREFER_TEMP_COMMON,
     box_size=BOX_SIZE,
-    deffusion_coeff=DEFFUSION_COEFF,
+    diffusion_coeff=DIFFUSION_COEFF,
     decay_coeff=DECAY_COEFF,
     temp_room=TEMP_ROOM,
-    enable_collision=ENABLE_COLLISION,
+    collision_strength=COLLISION_STRENGTH,
 )
 
 # --- Plotting Parameters ---
@@ -145,7 +160,7 @@ np.savez_compressed(
         "PREFER_TEMP_COMMON": PREFER_TEMP_COMMON,
         "NUM_GRID": NUM_GRID,
         "BOX_SIZE": BOX_SIZE,
-        "DEFFUSION_COEFF": DEFFUSION_COEFF,
+        "DIFFUSION_COEFF": DIFFUSION_COEFF,
         "DECAY_COEFF": DECAY_COEFF,
         "TEMP_ROOM": TEMP_ROOM,
         "SIM_TIME": SIM_TIME,

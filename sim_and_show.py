@@ -23,16 +23,16 @@ NUM_PENGUINS = 500
 PENGUIN_MOVE_FACTOR = 0.05
 PENGUIN_RADIUS = 0.1
 HEAT_GEN_COEFF = 0.15
-HEAT_P2E_COEFF = 100.0
-HEAT_E2P_COEFF = 1.0
-PREFER_TEMP_COMMON = 27.0
-INIT_TEMP_MEAN = PREFER_TEMP_COMMON - 3
+HEAT_P2E_COEFF = 1.0
+HEAT_E2P_COEFF = 0.01
+PREFER_TEMP_COMMON = 20.0
+INIT_TEMP_MEAN = PREFER_TEMP_COMMON - 2
 NUM_GRID = 180
 BOX_SIZE = 9.0
 DIFFUSION_COEFF = 0.4
-DECAY_COEFF = 0.5
+DECAY_COEFF = 0.4
 TEMP_ROOM = -30.0
-ENABLE_COLLISION = True
+COLLISION_STRENGTH = 10.0  # 碰撞排斥力强度
 
 print(
     calculate_stable_temp(
@@ -75,27 +75,45 @@ sim = PySimulation(
     diffusion_coeff=DIFFUSION_COEFF,
     decay_coeff=DECAY_COEFF,
     temp_room=TEMP_ROOM,
-    enable_collision=ENABLE_COLLISION,
+    collision_strength=COLLISION_STRENGTH,
 )
 
 
 # --- Plotting Parameters ---
 SIM_TIME = 100.0
-DT = 0.001
+DT = 0.003
 TOTAL_STEPS = int(SIM_TIME / DT)
 FRAMES_PER_SECOND = 10  # Target FPS for animation
-# Simulation steps per animation frame
 STEPS_PER_FRAME = max(1, int(1 / (FRAMES_PER_SECOND * DT)))
 TOTAL_FRAMES = int(TOTAL_STEPS / STEPS_PER_FRAME)
 
 print(f"Initializing simulation with {NUM_PENGUINS} penguins...")
 print(f"Grid size: {NUM_GRID}x{NUM_GRID}, Box size: {BOX_SIZE}")
-print(
-    f"Simulation time: {SIM_TIME}s, dt: {DT}, Tcalculate_penguin_density_by_tempotal steps: {TOTAL_STEPS}"
-)
+print(f"Simulation time: {SIM_TIME}s, dt: {DT}, Total steps: {TOTAL_STEPS}")
 print(
     f"Animation: Target FPS: {FRAMES_PER_SECOND}, Steps/Frame: {STEPS_PER_FRAME}, Total Frames: {TOTAL_FRAMES}"
 )
+
+
+# Initial state for plotting setup
+positions, _, body_temps, air_temps = sim.get_state()
+air_temps = np.array(air_temps).reshape((NUM_GRID, NUM_GRID))
+
+
+# Calculate initial temperature-gradient relationship
+temp_ranges, gradients = calculate_temp_gradient_relationship(air_temps)
+
+# Calculate initial penguin density by temperature
+temp_ranges_density, densities = calculate_penguin_density_by_temp(
+    positions, air_temps, BOX_SIZE, NUM_GRID
+)
+densities *= 2 * np.sqrt(3) * PENGUIN_RADIUS * PENGUIN_RADIUS
+
+# Calculate initial environmental temperatures at penguin positions
+env_temps = get_env_temps_at_positions(positions, air_temps, BOX_SIZE, NUM_GRID)
+
+# Create binary colors based on temperature preference
+penguin_colors = create_penguin_colors(body_temps, PREFER_TEMP_COMMON)
 
 # --- Matplotlib Setup ---
 fig = plt.figure(figsize=(16, 12))
@@ -104,34 +122,10 @@ ax_main = plt.subplot(2, 2, 2)  # Top right
 ax_density = plt.subplot(2, 2, 3)  # Bottom left - NEW: Temperature vs Penguin Density
 ax_gradient = plt.subplot(2, 2, 4)  # Bottom right
 
-# Initial state for plotting setup
-positions_init, _, body_temps_init, air_temps_vec_init = sim.get_state()
-air_temp_grid_init = np.array(air_temps_vec_init).reshape((NUM_GRID, NUM_GRID))
-
-
-# Calculate initial temperature-gradient relationship
-temp_range_init, avg_gradients_init = calculate_temp_gradient_relationship(
-    air_temp_grid_init
-)
-
-# Calculate initial penguin density by temperature
-temp_range_density_init, densities_init = calculate_penguin_density_by_temp(
-    positions_init, air_temp_grid_init, BOX_SIZE, NUM_GRID
-)
-densities_init *= 2 * np.sqrt(3) * PENGUIN_RADIUS * PENGUIN_RADIUS
-
-# Calculate initial environmental temperatures at penguin positions
-env_temps_init = get_env_temps_at_positions(
-    positions_init, air_temp_grid_init, BOX_SIZE, NUM_GRID
-)
-
-# Create binary colors based on temperature preference
-penguin_colors_init = create_penguin_colors(body_temps_init, PREFER_TEMP_COMMON)
-
 # Left subplot: Body temperature vs Environmental temperature scatter plot
 scatter_temp = ax_scatter.scatter(
-    body_temps_init,
-    env_temps_init,
+    body_temps,
+    env_temps,
     edgecolor="gray",
     s=10,
     alpha=0.7,
@@ -142,7 +136,7 @@ ax_scatter.set_ylim(TEMP_ROOM + 10, PREFER_TEMP_COMMON - 5)
 
 # Right subplot: Main simulation view
 im = ax_main.imshow(
-    air_temp_grid_init.T,
+    air_temps.T,
     cmap="coolwarm",
     origin="lower",
     extent=[0, BOX_SIZE, 0, BOX_SIZE],
@@ -150,9 +144,9 @@ im = ax_main.imshow(
     animated=True,
 )
 scatter_main = ax_main.scatter(
-    [p[0] for p in positions_init],
-    [p[1] for p in positions_init],
-    c=penguin_colors_init,
+    [p[0] for p in positions],
+    [p[1] for p in positions],
+    c=penguin_colors,
     edgecolor="none",
     s=5,
     animated=True,
@@ -160,12 +154,12 @@ scatter_main = ax_main.scatter(
 
 # Bottom right subplot: Temperature vs Gradient relationship
 (gradient_line,) = ax_gradient.plot(
-    temp_range_init, avg_gradients_init, "b-", linewidth=2, animated=True
+    temp_ranges, gradients, "b-", linewidth=2, animated=True
 )
 
 # Bottom left subplot: Temperature vs Penguin Density
 (density_line,) = ax_density.plot(
-    temp_range_density_init, densities_init, "g-", linewidth=2, animated=True
+    temp_ranges_density, densities, "g-", linewidth=2, animated=True
 )
 
 # Plot settings
@@ -239,8 +233,8 @@ def update(frame):
     scatter_temp.set_offsets(np.column_stack([body_temps, env_temps]))
 
     # Update gradient plot
-    temp_range, avg_gradients = calculate_temp_gradient_relationship(air_temp_grid)
-    gradient_line.set_data(temp_range, avg_gradients)
+    temp_ranges_grad, gradients = calculate_temp_gradient_relationship(air_temp_grid)
+    gradient_line.set_data(temp_ranges_grad, gradients)
 
     # Update density plot
     temp_range_density, densities = calculate_penguin_density_by_temp(
@@ -250,9 +244,9 @@ def update(frame):
     density_line.set_data(temp_range_density, densities)
 
     # Update gradient plot limits
-    if len(avg_gradients) > 0:
-        ax_gradient.set_xlim(np.min(temp_range), np.max(temp_range))
-        update_axis_limits(ax_gradient, avg_gradients)
+    if len(gradients) > 0:
+        ax_gradient.set_xlim(np.min(temp_ranges_grad), np.max(temp_ranges_grad))
+        update_axis_limits(ax_gradient, gradients)
 
     # Update density plot limits
     if len(densities) > 0:

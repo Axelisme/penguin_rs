@@ -1,7 +1,8 @@
 use numpy::PyReadonlyArray2;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
-use simulator::{AirTemp, Penguin, Simulation, SimulationConfig};
+
+use simulator::{AirTemp, Simulation, SimulationConfig};
 
 pub mod simulator;
 
@@ -23,10 +24,10 @@ impl PySimulation {
         heat_e2p_coeff: f64,
         prefer_temp_common: f64,
         box_size: f64,
-        deffusion_coeff: f64,
+        diffusion_coeff: f64,
         decay_coeff: f64,
         temp_room: f64,
-        enable_collision: bool,
+        collision_strength: f64,
     ) -> PyResult<Self> {
         let config = SimulationConfig::new(
             penguin_move_factor,
@@ -34,7 +35,7 @@ impl PySimulation {
             heat_gen_coeff,
             heat_p2e_coeff,
             heat_e2p_coeff,
-            enable_collision,
+            collision_strength,
         );
 
         let init_penguins_arr = init_penguins.as_array();
@@ -44,11 +45,17 @@ impl PySimulation {
             ));
         }
 
-        let penguins = init_penguins_arr
-            .rows()
-            .into_iter()
-            .map(|row| Penguin::new([row[0], row[1]], [0.0, 0.0], row[2], prefer_temp_common))
-            .collect::<Vec<_>>();
+        let num_penguins = init_penguins_arr.shape()[0];
+        let mut positions = Vec::with_capacity(num_penguins);
+        let mut body_temps = Vec::with_capacity(num_penguins);
+
+        for row in init_penguins_arr.rows() {
+            positions.push([row[0], row[1]]);
+            body_temps.push(row[2]);
+        }
+
+        let velocities = vec![[0.0, 0.0]; num_penguins];
+        let prefer_temps = vec![prefer_temp_common; num_penguins];
 
         let init_air_temp_arr = init_air_temp.as_array();
         if init_air_temp_arr.ndim() != 2 {
@@ -65,24 +72,26 @@ impl PySimulation {
         let air_temp = AirTemp::new(
             init_air_temp_arr.to_owned(),
             box_size,
-            deffusion_coeff,
+            diffusion_coeff,
             decay_coeff,
             temp_room,
         );
 
-        let simulation = Simulation::new(config, penguins, air_temp);
+        let simulation = Simulation::new(
+            config,
+            positions,
+            velocities,
+            body_temps,
+            prefer_temps,
+            air_temp,
+        );
         Ok(Self { simulation })
     }
 
     fn get_state(&self) -> PyResult<(Vec<[f64; 2]>, Vec<[f64; 2]>, Vec<f64>, Vec<Vec<f64>>)> {
-        let positions = self.simulation.penguins.iter().map(|p| p.pos).collect();
-        let velocities = self.simulation.penguins.iter().map(|p| p.vel).collect();
-        let body_temps = self
-            .simulation
-            .penguins
-            .iter()
-            .map(|p| p.body_temp)
-            .collect();
+        let positions = self.simulation.positions.clone();
+        let velocities = self.simulation.velocities.clone();
+        let body_temps = self.simulation.body_temps.clone();
         let air_temps_vec = self
             .simulation
             .air
