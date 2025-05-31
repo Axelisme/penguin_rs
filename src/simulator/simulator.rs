@@ -1,5 +1,3 @@
-use kdtree::distance::squared_euclidean;
-use kdtree::KdTree;
 use ndarray::Array2;
 
 pub struct Penguin {
@@ -241,6 +239,62 @@ impl Simulation {
         (derive_body_temps, derive_air_temp, velocities)
     }
 
+    fn apply_colli(&self, positions: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
+        // Optimized brute force collision detection
+        let colli_dist = 2.0 * self.config.penguin_radius;
+        let colli_dist_sq = colli_dist * colli_dist;
+        let n = positions.len();
+
+        // Pre-allocate correction vectors for better performance
+        let mut corrections = vec![[0.0; 2]; n];
+
+        // Brute force collision detection with optimizations
+        for i in 0..n {
+            for j in (i + 1)..n {
+                // Calculate distance vector
+                let dx = positions[i][0] - positions[j][0];
+                let dy = positions[i][1] - positions[j][1];
+                let dist_sq = dx * dx + dy * dy;
+
+                // Early exit if no collision or same position
+                if dist_sq >= colli_dist_sq || dist_sq < 1e-12 {
+                    continue;
+                }
+
+                // Calculate collision response
+                let dist = dist_sq.sqrt();
+                let overlap = colli_dist - dist;
+                let correction_magnitude = 0.5 * overlap / dist;
+
+                // Apply correction forces
+                let correction_x = correction_magnitude * dx;
+                let correction_y = correction_magnitude * dy;
+
+                // Penguin i gets pushed away from j
+                corrections[i][0] += correction_x;
+                corrections[i][1] += correction_y;
+
+                // Penguin j gets pushed away from i
+                corrections[j][0] -= correction_x;
+                corrections[j][1] -= correction_y;
+            }
+        }
+
+        // Apply corrections and boundary conditions
+        positions
+            .iter()
+            .zip(corrections.iter())
+            .map(|(pos, correction)| {
+                let new_x = pos[0] + correction[0];
+                let new_y = pos[1] + correction[1];
+                [
+                    new_x.rem_euclid(self.air.size_x),
+                    new_y.rem_euclid(self.air.size_y),
+                ]
+            })
+            .collect()
+    }
+
     fn apply_colli_and_update(
         &self,
         positions: Vec<[f64; 2]>,
@@ -261,49 +315,7 @@ impl Simulation {
         });
 
         positions = if self.config.enable_collision {
-            // collision tree
-            let kdtree = positions.iter().fold(
-                KdTree::with_capacity(2, positions.len()),
-                |mut kdtree, p| {
-                    kdtree.add(p, p).unwrap();
-                    kdtree
-                },
-            );
-
-            // Resolve overlaps by pushing penguins apart
-            let colli_dist = 2. * self.config.penguin_radius;
-            positions
-                .iter()
-                .map(|pi| {
-                    let (count, acc_pos) = kdtree
-                        .within(pi, colli_dist.powf(2.), &squared_euclidean)
-                        .unwrap()
-                        .into_iter()
-                        .filter(|(dist2, _)| *dist2 > 0.0)
-                        .map(|(dist2, pj)| {
-                            let dx = pi[0] - pj[0];
-                            let dy = pi[1] - pj[1];
-                            let overlap = colli_dist - dist2.sqrt();
-                            let corr_factor = 0.5 * overlap / colli_dist;
-                            [corr_factor * dx, corr_factor * dy]
-                        })
-                        .fold((0u64, [0.0; 2]), |(i, acc), x| {
-                            (i + 1, [acc[0] + x[0], acc[1] + x[1]])
-                        });
-                    if count == 0 {
-                        *pi
-                    } else {
-                        [pi[0] + acc_pos[0], pi[1] + acc_pos[1]]
-                    }
-                })
-                .map(|pos| {
-                    // Apply boundary conditions again
-                    [
-                        pos[0].rem_euclid(self.air.size_x),
-                        pos[1].rem_euclid(self.air.size_y),
-                    ]
-                })
-                .collect::<Vec<_>>()
+            self.apply_colli(positions)
         } else {
             positions
         };
