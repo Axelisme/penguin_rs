@@ -67,7 +67,7 @@ sim = PySimulation(
 
 
 # --- Plotting Parameters ---
-SIM_TIME = 500.0
+SIM_TIME = 100.0
 DT = 0.001
 TOTAL_STEPS = int(SIM_TIME / DT)
 FRAMES_PER_SECOND = 10  # Target FPS for animation
@@ -77,7 +77,9 @@ TOTAL_FRAMES = int(TOTAL_STEPS / STEPS_PER_FRAME)
 
 print(f"Initializing simulation with {NUM_PENGUINS} penguins...")
 print(f"Grid size: {NUM_GRID}x{NUM_GRID}, Box size: {BOX_SIZE}")
-print(f"Simulation time: {SIM_TIME}s, dt: {DT}, Total steps: {TOTAL_STEPS}")
+print(
+    f"Simulation time: {SIM_TIME}s, dt: {DT}, Tcalculate_penguin_density_by_tempotal steps: {TOTAL_STEPS}"
+)
 print(
     f"Animation: Target FPS: {FRAMES_PER_SECOND}, Steps/Frame: {STEPS_PER_FRAME}, Total Frames: {TOTAL_FRAMES}"
 )
@@ -103,6 +105,7 @@ temp_range_init, avg_gradients_init = calculate_temp_gradient_relationship(
 temp_range_density_init, densities_init = calculate_penguin_density_by_temp(
     positions_init, air_temp_grid_init, BOX_SIZE, NUM_GRID
 )
+densities_init *= 2 * np.sqrt(3) * PENGUIN_RADIUS * PENGUIN_RADIUS
 
 # Calculate initial environmental temperatures at penguin positions
 env_temps_init = get_env_temps_at_positions(
@@ -230,6 +233,7 @@ def update(frame):
     temp_range_density, densities = calculate_penguin_density_by_temp(
         positions, air_temp_grid, BOX_SIZE, NUM_GRID
     )
+    densities *= 2 * np.sqrt(3) * PENGUIN_RADIUS * PENGUIN_RADIUS
     density_line.set_data(temp_range_density, densities)
 
     # Update gradient plot limits
@@ -282,11 +286,12 @@ ani = animation.FuncAnimation(
 )
 
 plt.tight_layout()
-ani.save(
-    f"penguin_simulation_colli_{ENABLE_COLLISION}.mp4",
-    writer="ffmpeg",
-    fps=FRAMES_PER_SECOND,
-)
+# ani.save(
+#     f"penguin_simulation_colli_{ENABLE_COLLISION}.mp4",
+#     writer="ffmpeg",
+#     fps=FRAMES_PER_SECOND,
+# )
+plt.show()
 
 end_time = time.time()
 print(f"\nSimulation and animation complete. Total time: {end_time - start_time:.2f}s")

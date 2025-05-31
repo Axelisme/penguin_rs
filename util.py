@@ -1,4 +1,8 @@
+from typing import Callable, List, Tuple
+
+import matplotlib.pyplot as plt
 import numpy as np
+from scipy.integrate import odeint
 
 
 def calculate_temperature_gradient(air_temp_grid):
@@ -48,7 +52,7 @@ def calculate_penguin_density_by_temp(
 
     for target_temp in temp_range:
         # Create mask for grid cells within temperature range (±0.5°C)
-        temp_tolerance = 0.5
+        temp_tolerance = 1.0
         temp_mask = np.abs(air_temp_grid - target_temp) <= temp_tolerance
 
         if np.any(temp_mask):
@@ -136,3 +140,133 @@ def create_title_text(current_sim_time, frame, total_frames, air_stats, body_sta
         f"Body T: [{body_min:.2f}, {body_mid:.2f},{body_max:.2f}] "
         f"Air T: [{air_min:.2f}, {air_mid:.2f},{air_max:.2f}]"
     )
+
+
+def evolution_system(
+    state: List[float], t: float, A: float, B: float, x0: float, H_func: Callable
+) -> List[float]:
+    """
+    Two-variable evolution system
+    dx/dt = A - B(x-y)
+    dy/dt = (x-x0)*H(x, y)
+
+    Args:
+        state: [x, y] current state
+        t: time
+        A: parameter A
+        B: parameter B
+        x0: parameter x0 (reference point for dy/dt equation)
+        H_func: function H(x, y)
+
+    Returns:
+        [dx/dt, dy/dt] state change rate
+    """
+    x, y = state
+    dxdt = A - B * (x - y)
+    dydt = (x - x0) * H_func(x, y)
+    return [dxdt, dydt]
+
+
+def simulate_trajectories(
+    initial_points: List[Tuple[float, float]],
+    A: float,
+    B: float,
+    x0: float,
+    H_func: Callable,
+    t_span: Tuple[float, float],
+    num_points: int = 1000,
+) -> List[np.ndarray]:
+    """
+    Simulate trajectory evolution from given initial points
+
+    Args:
+        initial_points: list of initial points [(x0, y0), ...]
+        A: parameter A
+        B: parameter B
+        x0: parameter x0 (reference point for dy/dt equation)
+        H_func: function H(x, y)
+        t_span: time range (t_start, t_end)
+        num_points: number of time points
+
+    Returns:
+        List of trajectory arrays corresponding to each initial point, each array has shape (num_points, 2)
+    """
+    t = np.linspace(t_span[0], t_span[1], num_points)
+    trajectories = []
+
+    for x_init, y_init in initial_points:
+        initial_state = [x_init, y_init]
+        trajectory = odeint(evolution_system, initial_state, t, args=(A, B, x0, H_func))
+        trajectories.append(trajectory)
+
+    return trajectories
+
+
+def plot_integrated_analysis(
+    A: float,
+    B: float,
+    x0: float,
+    H_func: Callable,
+    trajectories: List[np.ndarray],
+    x_range: Tuple[float, float] = (-5, 5),
+    y_range: Tuple[float, float] = (-5, 5),
+    grid_density: int = 20,
+) -> None:
+    """
+    Plot integrated analysis: vector field + trajectories + isoclines in one figure
+
+    Args:
+        A: parameter A
+        B: parameter B
+        x0: parameter x0 (reference point for dy/dt equation)
+        H_func: function H(x, y)
+        trajectories: list of trajectory data
+        x_range: x-axis range
+        y_range: y-axis range
+        grid_density: grid density for vector field
+    """
+    plt.figure(figsize=(14, 10))
+
+    # Create grid for vector field
+    x = np.linspace(x_range[0], x_range[1], grid_density)
+    y = np.linspace(y_range[0], y_range[1], grid_density)
+    X, Y = np.meshgrid(x, y)
+
+    # Calculate vector field
+    DX = A - B * (X - Y)
+    DY = (X - x0) * H_func(X, Y)
+
+    # Normalize vector length for better display
+    M = np.sqrt(DX**2 + DY**2)
+    M[M == 0] = 1  # Avoid division by zero
+    DX_norm = DX / M
+    DY_norm = DY / M
+
+    # Plot vector field
+    quiver = plt.quiver(X, Y, DX_norm, DY_norm, M, cmap="viridis", alpha=0.6)
+    plt.colorbar(quiver, label="Vector magnitude", shrink=0.8)
+
+    # Add zero isoclines
+    plt.contour(
+        X, Y, DX, levels=[0], colors="red", linestyles="--", alpha=0.8, linewidths=2
+    )
+    plt.contour(
+        X, Y, DY, levels=[0], colors="blue", linestyles="--", alpha=0.8, linewidths=2
+    )
+
+    # Plot trajectories
+    for trajectory in trajectories:
+        plt.plot(trajectory[:, 0], trajectory[:, 1], alpha=0.9, linewidth=0.5)
+
+        # plot end point
+        plt.plot(trajectory[-1, 0], trajectory[-1, 1], "o", color="red", markersize=5)
+
+    # Customize plot
+    plt.xlim(x_range[0], x_range[1])
+    plt.ylim(y_range[0], y_range[1])
+    plt.xlabel("x", fontsize=14)
+    plt.ylabel("y", fontsize=14)
+    plt.title(f"dx/dt = {A} - {B}(x-y), dy/dt = (x-{x0})H(x,y)\n", fontsize=16, pad=20)
+
+    plt.tight_layout()
+    plt.show()
