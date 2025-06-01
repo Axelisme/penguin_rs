@@ -7,7 +7,6 @@ from penguin_rs import PySimulation
 
 from util import (
     calculate_penguin_density_by_temp,
-    calculate_stable_temp,
     calculate_temp_gradient_relationship,
     calculate_temperature_stats,
     create_penguin_colors,
@@ -26,7 +25,7 @@ HEAT_GEN_COEFF = 0.15
 HEAT_P2E_COEFF = 1.0
 HEAT_E2P_COEFF = 0.01
 PREFER_TEMP_COMMON = 20.0
-INIT_TEMP_MEAN = PREFER_TEMP_COMMON - 2
+INIT_TEMP_MEAN = PREFER_TEMP_COMMON
 NUM_GRID = 180
 BOX_SIZE = 9.0
 DIFFUSION_COEFF = 0.4
@@ -34,18 +33,28 @@ DECAY_COEFF = 0.4
 TEMP_ROOM = -30.0
 COLLISION_STRENGTH = 10.0  # 碰撞排斥力强度
 
-print(
-    calculate_stable_temp(
-        HEAT_GEN_COEFF,
-        HEAT_E2P_COEFF,
-        DIFFUSION_COEFF,
-        HEAT_P2E_COEFF,
-        PENGUIN_RADIUS,
-        DECAY_COEFF,
-        TEMP_ROOM,
-    )
-)
-# exit()
+
+# Parameter mapping for theoretical model
+A = HEAT_GEN_COEFF
+B = HEAT_E2P_COEFF
+x0 = PREFER_TEMP_COMMON
+alpha = PENGUIN_MOVE_FACTOR
+
+
+def H(density, grad):
+    return -alpha * (1.0 - density) * grad**2
+    # return -alpha * grad**2
+
+
+def actual_vector_field(x, y, grad_temps, gradients, density_temps, densities):
+    actual_grad = np.interp(y, grad_temps, gradients, left=0, right=0)
+    actual_density = np.interp(y, density_temps, densities, left=0, right=0)
+
+    dxdt = A - B * (x - y)
+    dydt = (x - x0) * H(actual_density, actual_grad)
+
+    return dxdt, dydt
+
 
 DESITY_FACTOR = 2.0
 init_penguin_positions = (
@@ -55,7 +64,7 @@ init_penguin_positions = (
     * PENGUIN_RADIUS
 ) + BOX_SIZE / 2
 init_penguin_temps = np.full(NUM_PENGUINS, INIT_TEMP_MEAN)
-init_air_temp = np.full((NUM_GRID, NUM_GRID), 0.3 * TEMP_ROOM + 0.7 * INIT_TEMP_MEAN)
+init_air_temp = np.full((NUM_GRID, NUM_GRID), 0.2 * TEMP_ROOM + 0.8 * INIT_TEMP_MEAN)
 
 init_penguin_infos = np.concatenate(
     [init_penguin_positions, init_penguin_temps[:, None]], axis=1
@@ -78,7 +87,6 @@ sim = PySimulation(
     collision_strength=COLLISION_STRENGTH,
 )
 
-
 # --- Plotting Parameters ---
 SIM_TIME = 100.0
 DT = 0.003
@@ -97,17 +105,16 @@ print(
 
 # Initial state for plotting setup
 positions, _, body_temps, air_temps = sim.get_state()
-air_temps = np.array(air_temps).reshape((NUM_GRID, NUM_GRID))
-
 
 # Calculate initial temperature-gradient relationship
-temp_ranges, gradients = calculate_temp_gradient_relationship(air_temps)
+grad_temps, gradients = calculate_temp_gradient_relationship(air_temps)
 
 # Calculate initial penguin density by temperature
-temp_ranges_density, densities = calculate_penguin_density_by_temp(
+density_temps, densities = calculate_penguin_density_by_temp(
     positions, air_temps, BOX_SIZE, NUM_GRID
 )
 densities *= 2 * np.sqrt(3) * PENGUIN_RADIUS * PENGUIN_RADIUS
+densities = np.clip(densities, 0, 1)
 
 # Calculate initial environmental temperatures at penguin positions
 env_temps = get_env_temps_at_positions(positions, air_temps, BOX_SIZE, NUM_GRID)
@@ -115,24 +122,46 @@ env_temps = get_env_temps_at_positions(positions, air_temps, BOX_SIZE, NUM_GRID)
 # Create binary colors based on temperature preference
 penguin_colors = create_penguin_colors(body_temps, PREFER_TEMP_COMMON)
 
-# --- Matplotlib Setup ---
-fig = plt.figure(figsize=(16, 12))
-ax_scatter = plt.subplot(2, 2, 1)  # Top left
-ax_main = plt.subplot(2, 2, 2)  # Top right
-ax_density = plt.subplot(2, 2, 3)  # Bottom left - NEW: Temperature vs Penguin Density
-ax_gradient = plt.subplot(2, 2, 4)  # Bottom right
 
-# Left subplot: Body temperature vs Environmental temperature scatter plot
+# --- Matplotlib Setup ---
+fig, axs = plt.subplots(2, 2, figsize=(16, 12))
+ax_scatter, ax_main = axs[0]
+ax_density, ax_gradient = axs[1]
+
+# Left subplot: Body temperature vs Environmental temperature scatter plot with vector field
 scatter_temp = ax_scatter.scatter(
-    body_temps,
-    env_temps,
-    edgecolor="gray",
-    s=10,
-    alpha=0.7,
-    animated=True,
+    body_temps, env_temps, edgecolor="gray", s=10, alpha=0.7, animated=True
 )
-# ax_scatter.set_xlim(PREFER_TEMP_COMMON - 1, PREFER_TEMP_COMMON + 1)
-ax_scatter.set_ylim(TEMP_ROOM + 10, PREFER_TEMP_COMMON - 5)
+
+
+# Initialize vector field grid based on initial data range
+x_range = [body_temps.min() - 2, body_temps.max() + 2]
+y_range = [env_temps.min() - 2, env_temps.max() + 2]
+x_vec = np.linspace(x_range[0], x_range[1], 100)
+y_vec = np.linspace(y_range[0], y_range[1], 100)
+Xs, Ys = np.meshgrid(x_vec, y_vec)
+U_vec, V_vec = actual_vector_field(
+    Xs, Ys, grad_temps, gradients, density_temps, densities
+)
+
+# Plot vector field (this will be recreated each frame)
+quiver = ax_scatter.quiver(
+    Xs[::10, ::10],
+    Ys[::10, ::10],
+    U_vec[::10, ::10],
+    V_vec[::10, ::10],
+    animated=True,
+    scale=10,
+    width=0.002,
+)
+
+
+# contour of dx/dt = 0 and dy/dt = 0
+dx_contour = ax_scatter.contour(
+    Xs, Ys, U_vec, levels=[0], colors="red", linestyles="--", alpha=0.8, linewidths=2
+)
+dy_contour = ax_scatter.axvline(PREFER_TEMP_COMMON, color="blue", alpha=0.8)
+
 
 # Right subplot: Main simulation view
 im = ax_main.imshow(
@@ -140,42 +169,33 @@ im = ax_main.imshow(
     cmap="coolwarm",
     origin="lower",
     extent=[0, BOX_SIZE, 0, BOX_SIZE],
-    interpolation="nearest",
+    interpolation="none",
     animated=True,
 )
 scatter_main = ax_main.scatter(
-    [p[0] for p in positions],
-    [p[1] for p in positions],
+    positions[:, 0],
+    positions[:, 1],
     c=penguin_colors,
     edgecolor="none",
-    s=5,
     animated=True,
+    s=10,
 )
 
 # Bottom right subplot: Temperature vs Gradient relationship
 (gradient_line,) = ax_gradient.plot(
-    temp_ranges, gradients, "b-", linewidth=2, animated=True
+    grad_temps, gradients, animated=True, label="Actual"
 )
 
 # Bottom left subplot: Temperature vs Penguin Density
 (density_line,) = ax_density.plot(
-    temp_ranges_density, densities, "g-", linewidth=2, animated=True
+    density_temps, densities, animated=True, label="Actual"
 )
+
 
 # Plot settings
 ax_scatter.set_xlabel("Body Temperature (°C)")
 ax_scatter.set_ylabel("Environmental Temperature (°C)")
-ax_scatter.set_title("Body vs Environmental Temperature")
-ax_scatter.grid(True, alpha=0.3)
-# Add reference line for preferred temperature
-ax_scatter.axvline(
-    x=PREFER_TEMP_COMMON,
-    color="red",
-    linestyle="--",
-    alpha=0.7,
-    label=f"Preferred Temp ({PREFER_TEMP_COMMON}°C)",
-)
-ax_scatter.legend()
+ax_scatter.set_title("Body vs Env Temp + Dynamic Vector Field + Isoclines")
 
 ax_main.set_xlim(0, BOX_SIZE)
 ax_main.set_ylim(0, BOX_SIZE)
@@ -185,24 +205,24 @@ title = ax_main.set_title("Penguin Simulation - Step 0")
 ax_main.set_aspect("equal", adjustable="box")
 
 # Gradient plot settings
+ax_gradient.set_xlim(TEMP_ROOM, PREFER_TEMP_COMMON)
+ax_gradient.set_ylim(0, 2.5)
 ax_gradient.set_xlabel("Temperature (°C)")
 ax_gradient.set_ylabel("Average Gradient")
 ax_gradient.set_title("Temperature vs Gradient Relationship")
-ax_gradient.grid(True, alpha=0.3)
+ax_gradient.legend()
 
 # Density plot settings
+ax_density.set_xlim(TEMP_ROOM, PREFER_TEMP_COMMON)
+ax_density.set_ylim(0, 1.1)
 ax_density.set_xlabel("Temperature (°C)")
 ax_density.set_ylabel("Penguin Density (penguins/unit²)")
 ax_density.set_title("Temperature vs Penguin Density")
-ax_density.grid(True, alpha=0.3)
-
-# Add colorbar for main plot
-fig.colorbar(im, ax=ax_main, label="Air Temperature (°C)")
+ax_density.legend()
 
 
 # --- Animation Update Function ---
 def update(frame):
-    global sim
     start_frame_time = time.time()
 
     # Run simulation steps for this frame
@@ -210,56 +230,96 @@ def update(frame):
         sim.step(DT)
 
     # Get current state
-    positions, _, body_temps, air_temps_vec = sim.get_state()
-
-    pos_array = np.array(positions)
+    positions, _, body_temps, air_temps = sim.get_state()
+    positions = np.array(positions)
     body_temps = np.array(body_temps)
-    air_temp_grid = np.array(air_temps_vec).reshape((NUM_GRID, NUM_GRID))
+    air_temps = np.array(air_temps).reshape((NUM_GRID, NUM_GRID))
 
     # Create binary colors based on temperature preference
     penguin_colors = create_penguin_colors(body_temps, PREFER_TEMP_COMMON)
 
     # Calculate environmental temperatures at current penguin positions
-    env_temps = get_env_temps_at_positions(positions, air_temp_grid, BOX_SIZE, NUM_GRID)
+    env_temps = get_env_temps_at_positions(positions, air_temps, BOX_SIZE, NUM_GRID)
 
     # --- Update Plot Data ---
     # Update main simulation view
-    im.set_data(air_temp_grid.T)
+    im.set_data(air_temps.T)
 
-    scatter_main.set_offsets(pos_array)
+    scatter_main.set_offsets(positions)
     scatter_main.set_color(penguin_colors)
 
     # Update temperature scatter plot
     scatter_temp.set_offsets(np.column_stack([body_temps, env_temps]))
 
     # Update gradient plot
-    temp_ranges_grad, gradients = calculate_temp_gradient_relationship(air_temp_grid)
-    gradient_line.set_data(temp_ranges_grad, gradients)
+    grad_temps, gradients = calculate_temp_gradient_relationship(air_temps)
+    gradient_line.set_data(grad_temps, gradients)
 
     # Update density plot
-    temp_range_density, densities = calculate_penguin_density_by_temp(
-        positions, air_temp_grid, BOX_SIZE, NUM_GRID
+    density_temps, densities = calculate_penguin_density_by_temp(
+        positions, air_temps, BOX_SIZE, NUM_GRID
     )
     densities *= 2 * np.sqrt(3) * PENGUIN_RADIUS * PENGUIN_RADIUS
-    density_line.set_data(temp_range_density, densities)
+    densities = np.clip(densities, 0, 1)
+    density_line.set_data(density_temps, densities)
 
-    # Update gradient plot limits
-    if len(gradients) > 0:
-        ax_gradient.set_xlim(np.min(temp_ranges_grad), np.max(temp_ranges_grad))
-        update_axis_limits(ax_gradient, gradients)
+    update_axis_limits(ax_gradient, gradients)
+    update_axis_limits(ax_density, densities)
 
-    # Update density plot limits
-    if len(densities) > 0:
-        ax_density.set_xlim(np.min(temp_range_density), np.max(temp_range_density))
-        update_axis_limits(ax_density, densities)
+    # Dynamically update vector field grid based on current data range
+    x_range = [np.nanmin(body_temps) - 2, np.nanmax(body_temps) + 2]
+    y_range = [np.nanmin(env_temps) - 2, np.nanmax(env_temps) + 2]
+
+    # update scatter plot limits
+    ax_scatter.set_xlim(*x_range)
+    ax_scatter.set_ylim(*y_range)
+
+    # Update vector field using actual computed gradients and densities
+    x_vec = np.linspace(x_range[0], x_range[1], 100)
+    y_vec = np.linspace(y_range[0], y_range[1], 100)
+    Xs, Ys = np.meshgrid(x_vec, y_vec)
+    U_vec, V_vec = actual_vector_field(
+        Xs, Ys, grad_temps, gradients, density_temps, densities
+    )
+
+    # Update quiver positions and vectors
+    global quiver
+    quiver.remove()
+    quiver = ax_scatter.quiver(
+        Xs[::10, ::10],
+        Ys[::10, ::10],
+        U_vec[::10, ::10],
+        V_vec[::10, ::10],
+        animated=True,
+        scale=10,
+        width=0.002,
+    )
+
+    # update contour of dx/dt = 0 and dy/dt = 0
+
+    # contour of dx/dt = 0 and dy/dt = 0
+    global dx_contour, dy_contour
+    dx_contour.remove()
+    dy_contour.remove()
+    dx_contour = ax_scatter.contour(
+        Xs,
+        Ys,
+        U_vec,
+        levels=[0],
+        colors="red",
+        linestyles="--",
+        alpha=0.8,
+        linewidths=2,
+    )
+    dy_contour = ax_scatter.axvline(PREFER_TEMP_COMMON, color="blue", alpha=0.8)
+
+    # Adjust quiver scale dynamically based on vector magnitude
+    max_magnitude = np.sqrt(U_vec**2 + V_vec**2).max()
+    if max_magnitude > 0:
+        quiver.scale = max_magnitude * 10
 
     # --- Update Color Limits Dynamically ---
-    air_stats, body_stats = calculate_temperature_stats(air_temp_grid, body_temps)
-    air_min, air_mid, air_max = air_stats
-    body_min, body_mid, body_max = body_stats
-
-    ax_scatter.set_xlim(body_min - 1, body_max + 1)
-    ax_scatter.set_ylim(air_min - 1, air_max + 1)
+    air_stats, body_stats = calculate_temperature_stats(air_temps, body_temps)
 
     # --- Update Title and Print Status ---
     current_sim_time = (frame + 1) * STEPS_PER_FRAME * DT
@@ -272,11 +332,21 @@ def update(frame):
     title_text = f"{base_title} (Frame time: {frame_time * 1000:.1f}ms)"
     title.set_text(title_text)
 
-    update_color_limits(im, air_temp_grid)
+    update_color_limits(im, air_temps)
 
     print(f"\r{title_text}", end="\r")
 
-    return im, scatter_main, scatter_temp, gradient_line, density_line, title
+    return (
+        im,
+        scatter_main,
+        scatter_temp,
+        quiver,
+        gradient_line,
+        density_line,
+        title,
+        dx_contour,
+        dy_contour,
+    )
 
 
 # --- Save Animation as GIF ---
@@ -294,7 +364,7 @@ ani = animation.FuncAnimation(
 
 plt.tight_layout()
 # ani.save(
-#     f"penguin_simulation_colli_{ENABLE_COLLISION}.mp4",
+#     f"penguin_simulation_theory_colli_{ENABLE_COLLISION}.mp4",
 #     writer="ffmpeg",
 #     fps=FRAMES_PER_SECOND,
 # )

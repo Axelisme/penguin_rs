@@ -5,8 +5,6 @@ import numpy as np
 from penguin_rs import PySimulation
 from tqdm.auto import tqdm
 
-from util import calculate_stable_temp
-
 # Parameters based on main.rs
 SEED = 1
 NUM_PENGUINS = 500
@@ -23,19 +21,6 @@ DIFFUSION_COEFF = 0.4
 DECAY_COEFF = 0.4
 TEMP_ROOM = -30.0
 COLLISION_STRENGTH = 10.0  # 碰撞排斥力强度
-
-print(
-    calculate_stable_temp(
-        HEAT_GEN_COEFF,
-        HEAT_E2P_COEFF,
-        DIFFUSION_COEFF,
-        HEAT_P2E_COEFF,
-        PENGUIN_RADIUS,
-        DECAY_COEFF,
-        TEMP_ROOM,
-    )
-)
-# exit()
 
 
 DESITY_FACTOR = 2.0
@@ -96,7 +81,7 @@ with tqdm(total=TOTAL_STEPS) as t:
             frame = step // STEPS_PER_FRAME
 
             start_frame_time = time.time()
-            positions, velocities, body_temps, air_temps_vec = sim.get_state()
+            positions, velocities, body_temps, air_temps = sim.get_state()
 
             # 儲存數據
             current_sim_time = step * DT
@@ -104,11 +89,10 @@ with tqdm(total=TOTAL_STEPS) as t:
             data_positions.append(positions)
             data_velocities.append(velocities)
             data_body_temps.append(body_temps)
-            data_air_temps.append(np.array(air_temps_vec).reshape((NUM_GRID, NUM_GRID)))
+            data_air_temps.append(air_temps)
 
             # 計算溫度範圍
-            air_temp_grid = np.array(air_temps_vec).reshape((NUM_GRID, NUM_GRID))
-            air_min, air_max = np.min(air_temp_grid), np.max(air_temp_grid)
+            air_min, air_max = np.min(air_temps), np.max(air_temps)
             body_min, body_max = np.min(body_temps), np.max(body_temps)
 
             # 計算並輸出標題文字

@@ -1,43 +1,39 @@
-from math import pi, sqrt
+import math
 
-import numpy as np
+import scipy.special as sp
 
 
-def sovle_temp_eqution(C, h0, r, cutoff_G=10) -> float:
+def calculate_T0(epsilon, C, r):
     """
-    計算二維最密堆積晶格下微分方程 T - C∇²T = h(r)
-    在原點處的解，假設 h(r) = h0 * Σ δ(r - R)
+    根據給定參數計算 T 在原點 (r=0) 的值。
+
+    公式: T(0) = (r^2 / (2C)) * exp(epsilon*r^2 / (2C)) * E_1(epsilon*r^2 / (2C))
 
     參數：
-        C: 擴散係數
-        h0: 源項強度 (物理意義上的單個點源強度)
-        r: 晶格常數（距離）
-        cutoff_G: 最多考慮 reciprocal vector G 的模長限制（實際是 index 範圍）
+    epsilon (float): 微分方程中的常數 epsilon, 必須是正數。
+    C (float): 微分方程中的常數 C, 必須是正數。
+    r (float): D(r) 中高斯分佈的標準差參數 r, 必須是正數。
 
-    回傳：
-        T(0): 在原點的穩定解值 (考慮了正確的歸一化因子)
+    返回：
+    float: T(0) 的數值解。
     """
-    # Reciprocal lattice vectors (analytically derived)
-    b1 = (2 * pi / r) * np.array([1, -1 / sqrt(3)])
-    b2 = (2 * pi / r) * np.array([0, 2 / sqrt(3)])
 
-    # k-space summation part
-    sum_G_term = 0.0
-    for m in range(-cutoff_G, cutoff_G + 1):
-        for n in range(-cutoff_G, cutoff_G + 1):
-            G = m * b1 + n * b2
-            G2 = np.dot(G, G)
-            # The term for G=0 is 1/(1+0) = 1, which is correctly handled.
-            sum_G_term += 1 / (1 + C * G2)
+    arg_E1 = (epsilon * r**2) / (2 * C)
 
-    A_cell = (sqrt(3) / 2) * r**2
+    # 檢查 E1 函數的參數是否極小，防止潛在的數值問題，儘管理論上它不會是0或負數
+    if arg_E1 < 1e-10:  # 如果接近0，E1會非常大
+        # 這裡可以根據需要添加警告或更精確的處理，但對於正常物理情況應為正值
+        print(
+            f"Warning: Argument for E_1 is very small ({arg_E1}), result might be very large."
+        )
 
-    # Physical solution T(0) = (h0 / A_cell) * sum_G_term
-    return (h0 / A_cell) * sum_G_term
+    e1_value = sp.exp1(arg_E1)
+
+    return (r**2 / (2 * C)) * math.exp(arg_E1) * e1_value
 
 
 def calculate_stable_temp(A, B, C, D, r, epsilon, t_room) -> float:
-    """
+    r"""
     計算以下方程的解：
     $$
     0 = C * ∇²T + A*D/B * \sum_{R} N(R; 0, r) - \epsilon * (T - T_room)
@@ -45,11 +41,4 @@ def calculate_stable_temp(A, B, C, D, r, epsilon, t_room) -> float:
     其中 N(R; 0, r) 是高度為1的 Gaussian 分布。
     """
 
-    # 計算高斯分佈的面積作為源項強度
-    h0 = A * D / B * 2 * pi * r**2
-
-    return t_room + sovle_temp_eqution(C / epsilon, h0 / epsilon, 2 * r, cutoff_G=50)
-
-
-if __name__ == "__main__":
-    pass
+    return A * D / B * calculate_T0(epsilon, C, r) + t_room

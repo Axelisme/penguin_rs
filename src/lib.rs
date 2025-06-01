@@ -1,4 +1,4 @@
-use numpy::PyReadonlyArray2;
+use numpy::{PyArray1, PyArray2, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
@@ -88,11 +88,38 @@ impl PySimulation {
         Ok(Self { simulation })
     }
 
-    fn get_state(&self) -> PyResult<(Vec<[f64; 2]>, Vec<[f64; 2]>, Vec<f64>, Vec<Vec<f64>>)> {
-        let positions = self.simulation.positions.clone();
-        let velocities = self.simulation.velocities.clone();
-        let body_temps = self.simulation.body_temps.clone();
-        let air_temps_vec = self
+    fn get_state<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray1<f64>>,
+        Bound<'py, PyArray2<f64>>,
+    )> {
+        // 創建 positions numpy 陣列 (num_penguins, 2)
+        let positions_vec: Vec<Vec<f64>> = self
+            .simulation
+            .positions
+            .iter()
+            .map(|pos| vec![pos[0], pos[1]])
+            .collect();
+        let positions_array = PyArray2::from_vec2(py, &positions_vec)?;
+
+        // 創建 velocities numpy 陣列 (num_penguins, 2)
+        let velocities_vec: Vec<Vec<f64>> = self
+            .simulation
+            .velocities
+            .iter()
+            .map(|vel| vec![vel[0], vel[1]])
+            .collect();
+        let velocities_array = PyArray2::from_vec2(py, &velocities_vec)?;
+
+        // 創建 body_temps numpy 陣列 (num_penguins,)
+        let body_temps_array = PyArray1::from_vec(py, self.simulation.body_temps.clone());
+
+        // 創建 air_temps numpy 陣列 (grid_size, grid_size)
+        let air_temps_vec: Vec<Vec<f64>> = self
             .simulation
             .air
             .temp
@@ -100,7 +127,14 @@ impl PySimulation {
             .into_iter()
             .map(|row| row.to_vec())
             .collect();
-        Ok((positions, velocities, body_temps, air_temps_vec))
+        let air_temps_array = PyArray2::from_vec2(py, &air_temps_vec)?;
+
+        Ok((
+            positions_array,
+            velocities_array,
+            body_temps_array,
+            air_temps_array,
+        ))
     }
 
     fn step(&mut self, dt: f64) -> PyResult<()> {
