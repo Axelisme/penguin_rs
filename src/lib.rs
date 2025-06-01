@@ -22,7 +22,7 @@ impl PySimulation {
         heat_gen_coeff: f64,
         heat_p2e_coeff: f64,
         heat_e2p_coeff: f64,
-        prefer_temp_common: f64,
+        prefer_temp: f64,
         box_size: f64,
         diffusion_coeff: f64,
         decay_coeff: f64,
@@ -55,7 +55,7 @@ impl PySimulation {
         }
 
         let velocities = vec![[0.0, 0.0]; num_penguins];
-        let prefer_temps = vec![prefer_temp_common; num_penguins];
+        let prefer_temps = vec![prefer_temp; num_penguins];
 
         let init_air_temp_arr = init_air_temp.as_array();
         if init_air_temp_arr.ndim() != 2 {

@@ -4,27 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def create_penguin_colors(body_temps, prefer_temp_common):
-    """Create binary colors based on temperature preference"""
-    return ["white" if temp > prefer_temp_common else "black" for temp in body_temps]
-
-
-def calculate_temperature_stats(air_temp_grid, body_temps):
-    """Calculate temperature statistics for display"""
-    air_min, air_mid, air_max = (
-        np.min(air_temp_grid),
-        np.median(air_temp_grid),
-        np.max(air_temp_grid),
-    )
-    body_min, body_mid, body_max = (
-        np.min(body_temps),
-        np.median(body_temps),
-        np.max(body_temps),
-    )
-    return (air_min, air_mid, air_max), (body_min, body_mid, body_max)
-
-
-def update_axis_limits(ax, data_range, padding_factor=0.1):
+def update_y_limits(ax, data_range, padding_factor=0.1):
     """Update axis limits with padding"""
     data_min, data_max = np.min(data_range), np.max(data_range)
     if data_min != data_max:
@@ -32,28 +12,6 @@ def update_axis_limits(ax, data_range, padding_factor=0.1):
         ax.set_ylim(data_min - data_pad, data_max + data_pad)
     else:
         ax.set_ylim(0, max(1, data_max * 1.1))
-
-
-def update_color_limits(im, data, padding_factor=0.1):
-    """Update image color limits with padding"""
-    data_min, data_max = np.min(data), np.max(data)
-    if data_min == data_max:
-        data_min -= 0.5
-        data_max += 0.5
-    im_pad = (data_max - data_min) * padding_factor
-    im.set_clim(vmin=data_min - im_pad, vmax=data_max + im_pad)
-
-
-def create_title_text(current_sim_time, frame, total_frames, air_stats, body_stats):
-    """Create formatted title text for animation"""
-    air_min, air_mid, air_max = air_stats
-    body_min, body_mid, body_max = body_stats
-
-    return (
-        f"Penguin Sim - Time: {current_sim_time:.2f}s Frame: {frame}/{total_frames} "
-        f"Body T: [{body_min:.2f}, {body_mid:.2f},{body_max:.2f}] "
-        f"Air T: [{air_min:.2f}, {air_mid:.2f},{air_max:.2f}]"
-    )
 
 
 def plot_integrated_analysis(

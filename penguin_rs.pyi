@@ -16,7 +16,7 @@ class PySimulation:
         heat_gen_coeff: float,
         heat_p2e_coeff: float,
         heat_e2p_coeff: float,
-        prefer_temp_common: float,
+        prefer_temp: float,
         box_size: float,
         diffusion_coeff: float,
         decay_coeff: float,

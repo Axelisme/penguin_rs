@@ -13,8 +13,8 @@ PENGUIN_RADIUS = 0.1
 HEAT_GEN_COEFF = 0.15
 HEAT_P2E_COEFF = 1.0
 HEAT_E2P_COEFF = 0.01
-PREFER_TEMP_COMMON = 20.0
-INIT_TEMP_MEAN = PREFER_TEMP_COMMON - 2
+PREFER_TEMP = 20.0
+INIT_TEMP_MEAN = PREFER_TEMP
 NUM_GRID = 180
 BOX_SIZE = 9.0
 DIFFUSION_COEFF = 0.4
@@ -23,15 +23,15 @@ TEMP_ROOM = -30.0
 COLLISION_STRENGTH = 10.0  # 碰撞排斥力强度
 
 
-DESITY_FACTOR = 2.0
+DENSITY_FACTOR = 2.0
 init_penguin_positions = (
     (np.random.rand(NUM_PENGUINS, 2) - 0.5)
-    * DESITY_FACTOR
+    * DENSITY_FACTOR
     * np.sqrt(NUM_PENGUINS)
     * PENGUIN_RADIUS
 ) + BOX_SIZE / 2
 init_penguin_temps = np.full(NUM_PENGUINS, INIT_TEMP_MEAN)
-init_air_temp = np.full((NUM_GRID, NUM_GRID), 0.5 * (TEMP_ROOM + INIT_TEMP_MEAN))
+init_air_temp = np.full((NUM_GRID, NUM_GRID), 0.2 * TEMP_ROOM + 0.8 * INIT_TEMP_MEAN)
 
 init_penguin_infos = np.concatenate(
     [init_penguin_positions, init_penguin_temps[:, None]], axis=1
@@ -46,7 +46,7 @@ sim = PySimulation(
     heat_gen_coeff=HEAT_GEN_COEFF,
     heat_p2e_coeff=HEAT_P2E_COEFF,
     heat_e2p_coeff=HEAT_E2P_COEFF,
-    prefer_temp_common=PREFER_TEMP_COMMON,
+    prefer_temp=PREFER_TEMP,
     box_size=BOX_SIZE,
     diffusion_coeff=DIFFUSION_COEFF,
     decay_coeff=DECAY_COEFF,
@@ -55,8 +55,8 @@ sim = PySimulation(
 )
 
 # --- Plotting Parameters ---
-SIM_TIME = 200.0
-DT = 0.001
+SIM_TIME = 100.0
+DT = 0.003
 TOTAL_STEPS = int(SIM_TIME / DT)
 STEPS_PER_FRAME = 100
 TOTAL_FRAMES = int(TOTAL_STEPS / STEPS_PER_FRAME)
@@ -141,12 +141,14 @@ np.savez_compressed(
         "HEAT_P2E_COEFF": HEAT_P2E_COEFF,
         "HEAT_E2P_COEFF": HEAT_E2P_COEFF,
         "INIT_TEMP_MEAN": INIT_TEMP_MEAN,
-        "PREFER_TEMP_COMMON": PREFER_TEMP_COMMON,
+        "PREFER_TEMP": PREFER_TEMP,
         "NUM_GRID": NUM_GRID,
         "BOX_SIZE": BOX_SIZE,
         "DIFFUSION_COEFF": DIFFUSION_COEFF,
         "DECAY_COEFF": DECAY_COEFF,
         "TEMP_ROOM": TEMP_ROOM,
+        "COLLISION_STRENGTH": COLLISION_STRENGTH,
+        "DENSITY_FACTOR": DENSITY_FACTOR,
         "SIM_TIME": SIM_TIME,
         "DT": DT,
         "TOTAL_STEPS": TOTAL_STEPS,

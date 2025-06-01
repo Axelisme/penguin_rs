@@ -179,29 +179,16 @@ impl Simulation {
     }
 
     pub fn step_euler(&mut self, dt: f64) {
-        // 計算氣溫更新需要的子步驟數量
-        let max_stable_dt = self.air.get_max_stable_dt();
-        let air_sub_steps = if dt > max_stable_dt {
-            (dt / max_stable_dt).ceil() as usize
-        } else {
-            1
-        };
-        let air_dt = dt / air_sub_steps as f64;
-
-        // 計算當前狀態的導數
+        // 計算企鵝位置的氣溫
         let air_temps = self
             .positions
             .iter()
             .map(|pos| self.air.get_temp(*pos))
             .collect::<Vec<_>>();
 
-        // 更新企鵝體溫（一次性）
+        // 計算企鵝體溫的導數
         let body_temp_derivatives =
             self.compute_body_temp_derivatives(&self.body_temps, &air_temps);
-        for (body_temp, derivative) in self.body_temps.iter_mut().zip(body_temp_derivatives.iter())
-        {
-            *body_temp += derivative * dt;
-        }
 
         // 計算基本速度（溫度梯度驅動）
         let mut velocities = self.compute_velocities(
@@ -214,28 +201,27 @@ impl Simulation {
         // 添加碰撞排斥速度
         if self.config.collision_strength > 0.0 {
             let collision_velocities = self.compute_collision_repulsion(&self.positions);
-            for (v, cv) in velocities.iter_mut().zip(collision_velocities.iter()) {
-                v[0] += cv[0];
-                v[1] += cv[1];
-            }
+            velocities
+                .iter_mut()
+                .zip(collision_velocities.iter())
+                .for_each(|(v, cv)| {
+                    v[0] += cv[0];
+                    v[1] += cv[1];
+                });
         }
 
-        self.velocities = velocities.clone();
+        // 更新企鵝體溫（一次性）
+        self.body_temps
+            .iter_mut()
+            .zip(body_temp_derivatives.iter())
+            .for_each(|(body_temp, derivative)| {
+                *body_temp += derivative * dt;
+            });
 
-        // 更新位置（使用修正後的速度）
-        self.positions = self
-            .positions
-            .iter()
-            .zip(velocities.iter())
-            .map(|(pos, v)| {
-                [
-                    (pos[0] + v[0] * dt).rem_euclid(self.air.size_x),
-                    (pos[1] + v[1] * dt).rem_euclid(self.air.size_y),
-                ]
-            })
-            .collect();
-
-        // 分子步驟更新氣溫
+        // 計算氣溫更新需要的子步驟數量, 分子步驟更新氣溫
+        let max_stable_dt = self.air.get_max_stable_dt();
+        let air_sub_steps = (dt / max_stable_dt).ceil().max(1.0) as usize;
+        let air_dt = dt / air_sub_steps as f64;
         for _ in 0..air_sub_steps {
             let air_temps = self
                 .positions
@@ -250,8 +236,19 @@ impl Simulation {
                 &self.air,
             );
 
-            self.air.temp = &self.air.temp + &(&air_temp_derivative * air_dt);
+            self.air.temp += &(&air_temp_derivative * air_dt);
         }
+
+        // 更新位置（使用修正後的速度）
+        self.positions
+            .iter_mut()
+            .zip(velocities.iter())
+            .for_each(|(pos, v)| {
+                pos[0] = (pos[0] + v[0] * dt).rem_euclid(self.air.size_x);
+                pos[1] = (pos[1] + v[1] * dt).rem_euclid(self.air.size_y);
+            });
+
+        self.velocities = velocities;
     }
 
     fn compute_body_temp_derivatives(&self, body_temps: &[f64], air_temps: &[f64]) -> Vec<f64> {
@@ -282,15 +279,15 @@ impl Simulation {
         air_temps: &[f64],
         temp_air: &AirTemp,
     ) -> Array2<f64> {
-        let mut heat_src = Array2::<f64>::zeros(temp_air.temp.dim());
         let (nx, ny) = temp_air.temp.dim();
         let grid_x = temp_air.size_x / nx as f64;
         let grid_y = temp_air.size_y / ny as f64;
-        let heat_radius = self.config.penguin_radius;
 
+        let heat_radius = self.config.penguin_radius;
         let x_range = (HEAT_RADIUS_FACTOR * heat_radius / grid_x).ceil() as i32;
         let y_range = (HEAT_RADIUS_FACTOR * heat_radius / grid_y).ceil() as i32;
 
+        let mut heat_src = Array2::<f64>::zeros(temp_air.temp.dim());
         for ((pos, body_temp), air_temp) in positions
             .iter()
             .zip(body_temps.iter())

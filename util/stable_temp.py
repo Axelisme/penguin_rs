@@ -1,4 +1,5 @@
 import math
+from typing import Tuple
 
 import scipy.special as sp
 
@@ -42,3 +43,11 @@ def calculate_stable_temp(A, B, C, D, r, epsilon, t_room) -> float:
     """
 
     return A * D / B * calculate_T0(epsilon, C, r) + t_room
+
+
+def get_stable_point(
+    prefer_temp: float, heat_gen_coeff: float, heat_e2p_coeff: float
+) -> Tuple[float, float]:
+    # dx/dt = 0, x = prefer_temp
+    # dy/dt = 0, x - y = heat_gen_coeff / heat_e2p_coeff
+    return prefer_temp, prefer_temp - heat_gen_coeff / heat_e2p_coeff
