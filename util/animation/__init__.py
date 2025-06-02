@@ -2,8 +2,8 @@ from .check_env import CheckEnvPlot
 from .density import DensityPlot
 from .grad import GradPlot
 from .main import PenguinPlot
-from .TTplot import PhasePlot, VectorFieldPlot
-from .vel_ratio import VelocityRatioPlot
+from .TTplot import PhasePlot, TheoryEvolutionPlot, VectorFieldPlot
+from .vel_ratio import VelocityRatioPlot, VelocityRatioPlot2
 
 __all__ = [
     "CheckEnvPlot",
@@ -12,5 +12,7 @@ __all__ = [
     "PenguinPlot",
     "PhasePlot",
     "VectorFieldPlot",
+    "TheoryEvolutionPlot",
     "VelocityRatioPlot",
+    "VelocityRatioPlot2",
 ]

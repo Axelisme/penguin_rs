@@ -49,7 +49,7 @@ class GradPlot:
 
         # Set up plot properties
         ax.set_xlim(temp_room, prefer_temp)
-        ax.set_ylim(0, self.max_y_in_history * 1.1)
+        ax.set_ylim(0, self.max_y_in_history * 1.1 + 1e-6)
         ax.set_xlabel("Temperature (°C)")
         ax.set_ylabel("Average Gradient")
         ax.set_title("Temperature vs Gradient Relationship")
@@ -86,7 +86,7 @@ class GradPlot:
             self.fit_line.set_data(temp_smooth, gradient_fit)
 
             # Format parameter text
-            param_text = f"Fit: {a:.4f}(x-{x0:.2f})² + {c:.4f}"
+            param_text = f"Fit: {a:.4f}(x {-x0:+.2f})² + {c:.4f}"
 
         except (RuntimeError, ValueError):
             # If fitting fails, clear the fit line
@@ -96,7 +96,7 @@ class GradPlot:
         self.param_text.set_text(param_text)
 
         # Update axis limits based on data
-        self.ax.set_ylim(0, self.max_y_in_history * 1.1)
+        self.ax.set_ylim(0, self.max_y_in_history * 1.1 + 1e-6)
 
         # Set x-axis limits based on data range with some padding
         temp_range = temps.max() - temps.min()

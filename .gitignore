@@ -58,6 +58,7 @@ coverage.xml
 *.pot
 *.npz
 *.mp4
+*.png
 
 .DS_Store
 
