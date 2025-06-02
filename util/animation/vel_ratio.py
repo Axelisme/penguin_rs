@@ -52,7 +52,7 @@ class VelocityRatioPlot:
         )
         # Set x and y axis labels
         # self.ax.set_xlabel("V_predicted * (env_temp - temp_room)")
-        self.ax.set_xlabel("V_predicted * (body_temp - temp_room)")
+        self.ax.set_xlabel("V_predicted * (body_temp - prefer_temp)")
         self.ax.set_ylabel("V_actual - V_predicted")
 
         self.std_y_in_history = [1e-6]
