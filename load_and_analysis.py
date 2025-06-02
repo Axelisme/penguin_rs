@@ -2,6 +2,105 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, fftfreq, ifft
 
+
+# 理論演化函數定義 (from evolution_system.py)
+def density_func(x, PREFER_TEMP):
+    """密度函數"""
+    return 0.5 + np.arctan(0.7 * (x - PREFER_TEMP) * np.pi) / np.pi
+
+
+def grad_func(y):
+    """梯度函數"""
+    return np.clip(-0.051 * (y + 6.2) ** 2 + 17, 0.0, None)
+
+
+def calculate_theoretical_period(
+    HEAT_GEN_COEFF, HEAT_E2P_COEFF, PENGUIN_MOVE_FACTOR, PREFER_TEMP
+):
+    """
+    計算理論演化系統在穩定點附近的週期
+
+    理論演化方程:
+    dx/dt = HEAT_GEN_COEFF - HEAT_E2P_COEFF * (x - y)
+    dy/dt = -PENGUIN_MOVE_FACTOR * density(x) * (x - PREFER_TEMP) * grad(y)**2
+
+    Returns:
+    --------
+    theory_period : float
+        理論週期 (秒)
+    theory_freq : float
+        理論頻率 (Hz)
+    x_stable : float
+        穩定點的 x 座標 (體溫)
+    y_stable : float
+        穩定點的 y 座標 (環境溫度)
+    eigenvalues : complex array
+        Jacobian 矩陣的特徵值
+    """
+
+    # 計算穩定點
+    # 穩定點條件: dx/dt = 0 和 dy/dt = 0
+    # dy/dt = 0 當 x = PREFER_TEMP (假設 density(x) != 0 且 grad(y) != 0)
+    x_stable = PREFER_TEMP
+    # dx/dt = 0: HEAT_GEN_COEFF - HEAT_E2P_COEFF * (x_stable - y_stable) = 0
+    y_stable = x_stable - HEAT_GEN_COEFF / HEAT_E2P_COEFF
+
+    # 計算穩定點處的函數值
+    density_at_stable = density_func(x_stable, PREFER_TEMP)
+    grad_at_stable = grad_func(y_stable)
+
+    # 計算 Jacobian 矩陣
+    # J = [∂(dx/dt)/∂x  ∂(dx/dt)/∂y]
+    #     [∂(dy/dt)/∂x  ∂(dy/dt)/∂y]
+
+    # ∂(dx/dt)/∂x = 0
+    J11 = 0
+
+    # ∂(dx/dt)/∂y = HEAT_E2P_COEFF
+    J12 = HEAT_E2P_COEFF
+
+    # ∂(dy/dt)/∂x = -PENGUIN_MOVE_FACTOR * [density'(x) * (x - PREFER_TEMP) + density(x)] * grad(y)**2
+    # 在穩定點 x = PREFER_TEMP，所以 (x - PREFER_TEMP) = 0
+    J21 = -PENGUIN_MOVE_FACTOR * density_at_stable * grad_at_stable**2
+
+    # ∂(dy/dt)/∂y = -PENGUIN_MOVE_FACTOR * density(x) * (x - PREFER_TEMP) * 2 * grad(y) * grad'(y)
+    # 在穩定點 x = PREFER_TEMP，所以 (x - PREFER_TEMP) = 0
+    J22 = 0
+
+    # Jacobian 矩陣
+    J = np.array([[J11, J12], [J21, J22]])
+
+    # 計算特徵值
+    eigenvalues = np.linalg.eigvals(J)
+
+    # 對於形如 [0 a; b 0] 的矩陣，特徵值是 ±√(ab)
+    # 如果 ab < 0，特徵值是純虛數，系統有週期性振盪
+    ab = J12 * J21
+
+    if ab < 0:
+        # 週期性振盪
+        imaginary_part = np.sqrt(-ab)
+        theory_freq = imaginary_part / (2 * np.pi)  # Hz
+        theory_period = 2 * np.pi / imaginary_part  # seconds
+        is_oscillatory = True
+    else:
+        # 不穩定或非振盪
+        theory_freq = None
+        theory_period = None
+        is_oscillatory = False
+
+    return {
+        "period": theory_period,
+        "frequency": theory_freq,
+        "x_stable": x_stable,
+        "y_stable": y_stable,
+        "eigenvalues": eigenvalues,
+        "jacobian": J,
+        "is_oscillatory": is_oscillatory,
+        "ab_product": ab,
+    }
+
+
 # 讀取 npz 檔案
 npz = np.load("penguin_simulation_data.npz", allow_pickle=True)
 
@@ -28,6 +127,24 @@ NUM_PENGUINS = positions.shape[1]
 print(f"Loaded simulation data with {NUM_FRAMES} frames, {NUM_PENGUINS} penguins")
 print(f"Grid size: {NUM_GRID}x{NUM_GRID}, Box size: {BOX_SIZE}")
 
+# Calculate theoretical period
+print("\n=== Theoretical Analysis ===")
+theory_results = calculate_theoretical_period(
+    HEAT_GEN_COEFF, HEAT_E2P_COEFF, PENGUIN_MOVE_FACTOR, PREFER_TEMP
+)
+
+print(
+    f"Stable point: ({theory_results['x_stable']:.2f}, {theory_results['y_stable']:.2f})"
+)
+print(f"Jacobian eigenvalues: {theory_results['eigenvalues']}")
+print(f"ab product: {theory_results['ab_product']:.6f}")
+
+if theory_results["is_oscillatory"]:
+    print(f"Theoretical frequency: {theory_results['frequency']:.6f} Hz")
+    print(f"Theoretical period: {theory_results['period']:.2f} s")
+else:
+    print("System is not oscillatory (no periodic solution)")
+
 # Time domain analysis
 print("\n=== Time Domain Analysis ===")
 
@@ -38,9 +155,9 @@ print(f"Sampling frequency: {fs:.4f} Hz")
 print(f"Time step between frames: {dt:.4f} s")
 print(f"Total simulation time: {times[-1]:.2f} s")
 
-# Define frequency range of interest (1s to 1000s periods)
+# Define frequency range of interest (0.1s to 1000s periods)
 freq_min = 1.0 / 1000.0  # 0.001 Hz (1000s period)
-freq_max = 1.0 / 1.0  # 1 Hz (1s period)
+freq_max = 1.0 / 10.0  # 0.1 Hz (10s period)
 print(f"Analyzing frequency range: {freq_min:.4f} - {freq_max:.4f} Hz")
 print(f"Corresponding period range: {1 / freq_max:.1f} - {1 / freq_min:.1f} s")
 
@@ -88,18 +205,18 @@ print(
     f"Dominant frequency amplitude: {avg_amplitude_of_interest[dominant_freq_idx_local]:.4f}"
 )
 
-# Phase alignment procedure
-print("\nPerforming phase alignment...")
+# Phase alignment procedure (using sum of all frequencies)
+print("\nPerforming phase alignment using sum of all frequencies...")
 
-# Extract the complex values at the dominant frequency for all penguins
-dominant_freq_complex = fft_results[:, dominant_freq_idx_global]
+# Calculate the sum of all frequencies for each penguin
+fft_sum_per_penguin = np.sum(fft_results, axis=1)
 
-# Calculate phases at the dominant frequency
-phases = np.angle(dominant_freq_complex)
-amplitudes_at_dominant = np.abs(dominant_freq_complex)
+# Calculate phases based on the sum of all frequencies
+phases = np.angle(fft_sum_per_penguin)
+amplitudes_at_sum = np.abs(fft_sum_per_penguin)
 
-# Find the reference phase (use the penguin with the largest amplitude)
-ref_penguin_idx = np.argmax(amplitudes_at_dominant)
+# Find the reference phase (use the penguin with the largest amplitude sum)
+ref_penguin_idx = np.argmax(amplitudes_at_sum)
 ref_phase = phases[ref_penguin_idx]
 
 print(f"Reference penguin: {ref_penguin_idx} with phase {ref_phase:.4f} rad")
@@ -119,8 +236,8 @@ avg_aligned_amplitude = np.abs(avg_aligned_fft)
 # Convert aligned average FFT back to time domain
 avg_aligned_time_series = ifft(avg_aligned_fft).real
 
-# Create visualization
-fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 12))
+# Create visualization with 4 plots
+fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 10))
 
 # Plot 1: Body temperature time series for first few penguins
 ax1.set_title("Body Temperature Time Series (First 5 Penguins)")
@@ -131,29 +248,47 @@ ax1.set_ylabel("Body Temperature (°C)")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
-# Plot 2: Average body temperature over time
-avg_body_temp = np.mean(body_temps, axis=1)
-ax2.set_title("Average Body Temperature Over Time")
-ax2.plot(times, avg_body_temp, "b-", linewidth=2, label="Average Body Temperature")
-ax2.axhline(
-    y=PREFER_TEMP, color="r", linestyle="--", label=f"Preferred Temp ({PREFER_TEMP}°C)"
+# Plot 2: Amplitude spectrum in frequency range of interest (before alignment)
+ax2.set_title(
+    f"Average Amplitude Spectrum Before Alignment ({1 / freq_max:.0f}s - {1 / freq_min:.0f}s periods)"
 )
-ax2.axhline(y=TEMP_ROOM, color="g", linestyle="--", label=f"Room Temp ({TEMP_ROOM}°C)")
-ax2.set_xlabel("Time (s)")
-ax2.set_ylabel("Body Temperature (°C)")
-ax2.legend()
-ax2.grid(True, alpha=0.3)
-
-# Plot 3: Amplitude spectrum in frequency range of interest (before alignment)
-ax3.set_title(
-    f"Average Amplitude Spectrum ({1 / freq_max:.0f}s - {1 / freq_min:.0f}s periods)"
-)
-ax3.plot(
+ax2.plot(
     frequencies_of_interest,
     avg_amplitude_of_interest,
     "r-",
     linewidth=2,
     label="Before alignment",
+)
+ax2.axvline(
+    x=dominant_freq,
+    color="k",
+    linestyle="--",
+    label=f"Dominant freq: {dominant_freq:.4f} Hz",
+)
+# Add theoretical frequency line if oscillatory
+if theory_results["is_oscillatory"] and theory_results["frequency"] is not None:
+    if freq_min <= theory_results["frequency"] <= freq_max:
+        ax2.axvline(
+            x=theory_results["frequency"],
+            color="purple",
+            linestyle="-.",
+            linewidth=2,
+            label=f"Theory freq: {theory_results['frequency']:.4f} Hz",
+        )
+ax2.set_xlabel("Frequency (Hz)")
+ax2.set_ylabel("Average Amplitude")
+ax2.legend()
+ax2.grid(True, alpha=0.3)
+
+# Plot 3: Amplitude spectrum after phase alignment
+aligned_amplitudes_of_interest = avg_aligned_amplitude[positive_freq_mask]
+ax3.set_title("Average Amplitude Spectrum After Phase Alignment")
+ax3.plot(
+    frequencies_of_interest,
+    aligned_amplitudes_of_interest,
+    "g-",
+    linewidth=2,
+    label="After alignment",
 )
 ax3.axvline(
     x=dominant_freq,
@@ -161,84 +296,42 @@ ax3.axvline(
     linestyle="--",
     label=f"Dominant freq: {dominant_freq:.4f} Hz",
 )
+# Add theoretical frequency line if oscillatory
+if theory_results["is_oscillatory"] and theory_results["frequency"] is not None:
+    if freq_min <= theory_results["frequency"] <= freq_max:
+        ax3.axvline(
+            x=theory_results["frequency"],
+            color="purple",
+            linestyle="-.",
+            linewidth=2,
+            label=f"Theory freq: {theory_results['frequency']:.4f} Hz",
+        )
 ax3.set_xlabel("Frequency (Hz)")
-ax3.set_ylabel("Average Amplitude")
+ax3.set_ylabel("Aligned Average Amplitude")
 ax3.legend()
 ax3.grid(True, alpha=0.3)
 
-# Plot 4: Amplitude spectrum after phase alignment
-aligned_amplitudes_of_interest = avg_aligned_amplitude[positive_freq_mask]
-ax4.set_title("Amplitude Spectrum After Phase Alignment")
+# Plot 4: Reconstructed time series from aligned average FFT
+avg_body_temp = np.mean(body_temps, axis=1)
+ax4.set_title("Reconstructed Signal from Phase-Aligned Average FFT")
 ax4.plot(
-    frequencies_of_interest,
-    aligned_amplitudes_of_interest,
-    "g-",
-    linewidth=2,
-    label="After alignment",
-)
-ax4.axvline(
-    x=dominant_freq,
-    color="k",
-    linestyle="--",
-    label=f"Dominant freq: {dominant_freq:.4f} Hz",
-)
-ax4.set_xlabel("Frequency (Hz)")
-ax4.set_ylabel("Aligned Average Amplitude")
-ax4.legend()
-ax4.grid(True, alpha=0.3)
-
-# Plot 5: Phase distribution before and after alignment
-aligned_phases = np.angle(aligned_fft_results[:, dominant_freq_idx_global])
-ax5.set_title("Phase Distribution at Dominant Frequency")
-ax5.hist(phases, bins=20, alpha=0.7, label="Before alignment", density=True)
-
-# Check if aligned phases have sufficient range for histogram
-phase_range = np.max(aligned_phases) - np.min(aligned_phases)
-if phase_range > 1e-6:  # If there's enough variation
-    ax5.hist(
-        aligned_phases,
-        bins=min(20, max(5, int(NUM_PENGUINS / 25))),
-        alpha=0.7,
-        label="After alignment",
-        density=True,
-    )
-else:  # If phases are too close, just show a vertical line
-    ax5.axvline(
-        x=np.mean(aligned_phases),
-        color="orange",
-        linewidth=3,
-        alpha=0.7,
-        label="After alignment (all aligned)",
-    )
-
-ax5.axvline(
-    x=ref_phase, color="r", linestyle="--", label=f"Reference phase: {ref_phase:.3f}"
-)
-ax5.set_xlabel("Phase (radians)")
-ax5.set_ylabel("Density")
-ax5.legend()
-ax5.grid(True, alpha=0.3)
-
-# Plot 6: Reconstructed time series from aligned average FFT
-ax6.set_title("Reconstructed Signal from Phase-Aligned Average FFT")
-ax6.plot(
     times,
     avg_aligned_time_series,
     "purple",
     linewidth=2,
     label="Aligned average signal",
 )
-ax6.plot(
+ax4.plot(
     times,
     avg_body_temp - np.mean(avg_body_temp),
     "b--",
     alpha=0.7,
     label="Original average (centered)",
 )
-ax6.set_xlabel("Time (s)")
-ax6.set_ylabel("Temperature Fluctuation (°C)")
-ax6.legend()
-ax6.grid(True, alpha=0.3)
+ax4.set_xlabel("Time (s)")
+ax4.set_ylabel("Temperature Fluctuation (°C)")
+ax4.legend()
+ax4.grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.savefig("penguin_phase_aligned_analysis.png", dpi=300, bbox_inches="tight")
@@ -264,6 +357,7 @@ print(
 )
 
 # Phase coherence analysis
+aligned_phases = np.angle(fft_sum_per_penguin) - ref_phase
 phase_std_before = np.std(phases)
 phase_std_after = np.std(aligned_phases)
 print(f"Phase standard deviation before alignment: {phase_std_before:.4f} rad")
@@ -277,4 +371,48 @@ print("\nTop 5 dominant frequencies in range:")
 for i, (freq, amp) in enumerate(freq_amplitude_pairs[:5]):
     print(
         f"{i + 1}. Frequency: {freq:.6f} Hz, Period: {1 / freq:.2f} s, Amplitude: {amp:.4f}"
+    )
+
+# Compare theoretical and experimental results
+print("\n=== Theoretical vs Experimental Comparison ===")
+if theory_results["is_oscillatory"]:
+    theoretical_freq = theory_results["frequency"]
+    theoretical_period = theory_results["period"]
+    experimental_freq = dominant_freq
+    experimental_period = 1 / dominant_freq
+
+    freq_ratio = experimental_freq / theoretical_freq
+    period_ratio = experimental_period / theoretical_period
+    freq_difference = abs(experimental_freq - theoretical_freq)
+    period_difference = abs(experimental_period - theoretical_period)
+
+    print(f"Theoretical frequency: {theoretical_freq:.6f} Hz")
+    print(f"Experimental frequency: {experimental_freq:.6f} Hz")
+    print(f"Frequency ratio (exp/theory): {freq_ratio:.3f}")
+    print(f"Frequency difference: {freq_difference:.6f} Hz")
+    print()
+    print(f"Theoretical period: {theoretical_period:.2f} s")
+    print(f"Experimental period: {experimental_period:.2f} s")
+    print(f"Period ratio (exp/theory): {period_ratio:.3f}")
+    print(f"Period difference: {period_difference:.2f} s")
+    print()
+
+    # Calculate relative error
+    freq_relative_error = freq_difference / theoretical_freq * 100
+    period_relative_error = period_difference / theoretical_period * 100
+    print(f"Frequency relative error: {freq_relative_error:.2f}%")
+    print(f"Period relative error: {period_relative_error:.2f}%")
+
+    if freq_relative_error < 10:
+        print("✓ Good agreement between theory and experiment!")
+    elif freq_relative_error < 30:
+        print("~ Reasonable agreement between theory and experiment")
+    else:
+        print("✗ Significant discrepancy between theory and experiment")
+else:
+    print(
+        "Theoretical system is not oscillatory - cannot compare with experimental oscillations"
+    )
+    print(
+        "This suggests the system parameters may be in a different regime than expected"
     )
