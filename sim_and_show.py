@@ -6,7 +6,7 @@ import numpy as np
 from penguin_rs import PySimulation
 
 from util import calculate_temp_gradient_relationship, get_env_temps_at_positions
-from util.animation import GradPlot, PenguinPlot, PhasePlot, VelocityRatioPlot
+from util.animation import GradPlot, PenguinPlot, PhasePlot, VelocityRatioPlot2
 
 # Parameters based on main.rs
 SEED = 1
@@ -121,7 +121,7 @@ penguin_plot = PenguinPlot(
 
 penguin_gradients = np.interp(env_temps, grad_temps, gradients)
 
-vel_ratio_plot = VelocityRatioPlot(
+vel_ratio_plot = VelocityRatioPlot2(
     ax_density,
     body_temps,
     env_temps,

@@ -19,17 +19,8 @@ TEMP_ROOM = -30.0
 COLLISION_STRENGTH = 10.0  # 碰撞排斥力强度
 
 
-def density_func(x):
-    # density = 1 - 0.031 * (y - TEMP_ROOM)
-    # density = 1 + 0.7 * (x - PREFER_TEMP)
-    # density = np.clip(density, 0.0, 1.0)
-    density = 0.5 + np.arctan(0.7 * (x - PREFER_TEMP) * np.pi) / np.pi
-    # density = np.ones_like(density)
-    return density
-
-
 def grad_func(y):
-    grad = -0.051 * (y + 6.2) ** 2 + 17
+    grad = 25.57 * np.exp(-((y + 3.63) ** 2) / (2 * 9.47**2)) - 5.11
     return np.clip(grad, 0.0, None)
 
 
@@ -135,12 +126,7 @@ class TheoreticalEvolution:
 
     def dydt(self, x, y):
         """環境溫度演化方程: dy/dt = -PENGUIN_MOVE_FACTOR * density(y) * (x - PREFER_TEMP) * grad_func(y)"""
-        return (
-            -PENGUIN_MOVE_FACTOR
-            * density_func(x)
-            * (x - PREFER_TEMP)
-            * grad_func(y) ** 2
-        )
+        return -PENGUIN_MOVE_FACTOR * (x - PREFER_TEMP) * grad_func(y) ** 2
 
     def step(self, dt):
         """使用歐拉方法演化一步"""
@@ -148,8 +134,8 @@ class TheoreticalEvolution:
         dy = self.dydt(self.x, self.y)
 
         # add noise
-        dx += np.random.normal(0, 0.01)
-        dy += np.random.normal(0, 0.01)
+        dx += np.random.normal(0, 0.1, self.x.shape)
+        dy += np.random.normal(0, 0.1, self.y.shape)
 
         self.x += dx * dt
         self.y += dy * dt
@@ -220,23 +206,13 @@ def create_theory_animation(load_file=None):
     # 設置繪圖範圍
 
     x_range = [17.5, 22.5]
-    y_range = [-15, 15]
+    y_range = [-20, 15]
 
-    body_temps = np.linspace(*x_range, 100)
     env_temps = np.linspace(*y_range, 100)
-    density_range = density_func(body_temps)
     grad_range = grad_func(env_temps)
 
-    fig, axs = plt.subplots(1, 3, figsize=(12, 6))
-    axs[0].plot(body_temps, density_range)
-    axs[1].plot(env_temps, grad_range**2)
-    axs[2].imshow(
-        density_range[None, :] * grad_range[:, None] ** 2,
-        extent=[body_temps[0], body_temps[-1], env_temps[0], env_temps[-1]],
-        origin="lower",
-        cmap="viridis",
-        aspect="auto",
-    )
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(env_temps, grad_range**2)
     plt.show()
     # exit()
 
@@ -249,15 +225,9 @@ def create_theory_animation(load_file=None):
     y_vec = np.linspace(y_range[0], y_range[1], 25)
     X, Y, DX, DY = theory_evolution.get_vector_field(x_vec, y_vec)
 
-    # 計算向量大小並歸一化
-    # magnitude = np.sqrt(DX**2 + DY**2)
-    # magnitude_nonzero = np.maximum(magnitude, 1e-6)
-    # scale_factor = 0.8
-    # DX_norm = DX / magnitude_nonzero * scale_factor
-    # DY_norm = DY / magnitude_nonzero * scale_factor
+    # 先歸一化方向，然後重新縮放長度
     DX_norm = DX
     DY_norm = DY
-    magnitude = np.sqrt(DX_norm**2 + DY_norm**2)
 
     # 繪製向量場
     quiver = ax.quiver(
@@ -265,10 +235,9 @@ def create_theory_animation(load_file=None):
         Y,
         DX_norm,
         DY_norm,
-        magnitude,
         cmap="viridis",
         alpha=0.6,
-        scale=15,
+        scale_units="xy",  # 使用資料座標系
         width=0.003,
     )
 
