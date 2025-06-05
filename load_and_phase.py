@@ -3,9 +3,9 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
+load_path = os.path.join("data", "N500_T100s_C(False)", "simulation.npz")
 save_path = load_path.replace(".npz", "_phase2d.png")
-save_path = None
+# save_path = None
 
 
 def calculate_velocity_data_all_time(
@@ -110,8 +110,8 @@ def main():
     # Calculate color range (within two standard deviations)
     v_real_mean = np.mean(y_downsampled)
     v_real_std = np.std(y_downsampled)
-    vmin = v_real_mean - 2 * v_real_std
-    vmax = v_real_mean + 2 * v_real_std
+    vmin = v_real_mean - 4 * v_real_std
+    vmax = v_real_mean + 4 * v_real_std
 
     # Scatter plot: x=body_temp, y=env_temp, color=V_real
     scatter = ax.scatter(
@@ -129,6 +129,9 @@ def main():
     # Add color bar
     cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
     cbar.set_label("V_real")
+
+    ax.set_xlim(17, 23)
+    ax.set_ylim(-30, 15)
 
     ax.set_xlabel("Body Temperature (°C)")
     ax.set_ylabel("Environment Temperature (°C)")

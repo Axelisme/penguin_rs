@@ -54,7 +54,7 @@ class PenguinPlot:
             c=penguin_colors,
             edgecolor="none",
             animated=True,
-            s=10,
+            # s=80,
         )
 
         self.total_frames = total_frames

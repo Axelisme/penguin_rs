@@ -29,19 +29,6 @@ class TheoreticalEvolution:
         return 0.01
 
     def sub_step(self, vx, vy, dt):
-        sigma = 1
-
-        yi = self.y[:, None]
-        yj = self.y[None, :]
-
-        # pi = \sum_j N(y_i, y_j, sigma)
-        pi = np.sum(np.exp(-0.5 * ((yi - yj) / sigma) ** 2), axis=1)
-
-        # vi_corr = \sum_j (vj*pj) / pi
-        vi_corr = np.mean(vy * pi) / pi
-
-        vy = vy - vi_corr
-
         self.y = self.y + vy * dt
         self.x = self.x + vx * dt
 

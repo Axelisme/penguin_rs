@@ -6,11 +6,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm.auto import tqdm
 
-from util.animation import PenguinPlot
+from util import calculate_temp_gradient_relationship, get_env_temps_at_positions
+from util.animation import GradPlot, PenguinPlot, PhasePlot
 
-load_path = os.path.join("data", "N500_T100s_C(False)", "simulation.npz")
+load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
 save_path = load_path.replace(".npz", ".mp4")
-# save_path = None
+save_path = None
 
 # 讀取 npz 檔案
 npz = np.load(load_path, allow_pickle=True)
@@ -26,6 +27,10 @@ DT = params["DT"]
 BOX_SIZE = params["BOX_SIZE"]
 STEPS_PER_FRAME = params["STEPS_PER_FRAME"]
 PREFER_TEMP = params["PREFER_TEMP"]
+TEMP_ROOM = params["TEMP_ROOM"]
+NUM_GRID = params["NUM_GRID"]
+HEAT_GEN_COEFF = params["HEAT_GEN_COEFF"]
+HEAT_E2P_COEFF = params["HEAT_E2P_COEFF"]
 
 FRAMES_PER_SECOND = 1.0 / (STEPS_PER_FRAME * DT)
 
@@ -34,37 +39,57 @@ NUM_FRAMES = 100
 NUM_PENGUINS = positions.shape[1]
 
 print(f"Loaded simulation data with {NUM_FRAMES} frames, {NUM_PENGUINS} penguins")
-print(f"Grid size: {params['NUM_GRID']}x{params['NUM_GRID']}, Box size: {BOX_SIZE}")
+print(f"Grid size: {NUM_GRID}x{NUM_GRID}, Box size: {BOX_SIZE}")
 print(f"Animation: Target FPS: {FRAMES_PER_SECOND:.2f}")
 
 
-def make_title(current_t, frame, total_frames, air_temps, body_temps):
-    air_stats = (np.min(air_temps), np.median(air_temps), np.max(air_temps))
-    body_stats = (np.min(body_temps), np.median(body_temps), np.max(body_temps))
-    return (
-        f"Penguin Sim - Time: {current_t:.2f}s Frame: {frame}/{total_frames} "
-        f"Body T: [{body_stats[0]:.2f}, {body_stats[1]:.2f},{body_stats[2]:.2f}] "
-        f"Air T: [{air_stats[0]:.2f}, {air_stats[1]:.2f},{air_stats[2]:.2f}]"
-    )
-
-
 # --- Matplotlib Setup ---
-fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+ax_scatter, ax_main, ax_gradient = axs
 
 # Initial state for plotting setup
 positions_init = positions[0]
 body_temps_init = body_temps[0]
 air_temp_grid_init = air_temps[0]
 
-# Initialize penguin plot
+# Calculate initial temperature-gradient relationship
+grad_temps_init, gradients_init = calculate_temp_gradient_relationship(
+    air_temp_grid_init, BOX_SIZE
+)
+
+# Calculate environmental temperatures at penguin positions for PhasePlot
+env_temps_init = get_env_temps_at_positions(
+    positions_init, air_temp_grid_init, BOX_SIZE
+)
+
+# Initialize plot objects
+phase_plot = PhasePlot(
+    ax_scatter,
+    body_temps_init,
+    env_temps_init,
+    PREFER_TEMP,
+    HEAT_GEN_COEFF,
+    HEAT_E2P_COEFF,
+    TEMP_ROOM,
+)
+
 penguin_plot = PenguinPlot(
-    ax,
+    ax_main,
     positions_init,
     body_temps_init,
     air_temp_grid_init,
     BOX_SIZE,
     PREFER_TEMP,
     NUM_FRAMES,
+)
+
+# Initialize gradient plot
+grad_plot = GradPlot(
+    ax_gradient,
+    grad_temps_init,
+    gradients_init,
+    TEMP_ROOM,
+    PREFER_TEMP,
 )
 
 save_pbar = tqdm(total=NUM_FRAMES, desc="Rendering animation", unit="frame")
@@ -78,26 +103,30 @@ def update(frame):
     air_temp_grid = air_temps[frame]
     current_t = times[frame]
 
-    # Update penguin plot
+    # Calculate temperature gradient relationship
+    grad_temps, gradients = calculate_temp_gradient_relationship(
+        air_temp_grid, BOX_SIZE
+    )
+
+    # Calculate environmental temperatures at penguin positions
+    env_temps = get_env_temps_at_positions(positions_frame, air_temp_grid, BOX_SIZE)
+
+    # Update all plots
+    phase_artists = phase_plot.update(body_temps_frame, env_temps)
     penguin_artists = penguin_plot.update(
         positions_frame, body_temps_frame, air_temp_grid, current_t, frame
     )
-
-    title_text = make_title(
-        current_t, frame, NUM_FRAMES, air_temp_grid, body_temps_frame
-    )
-
-    print(f"\r{title_text}", end="\r")
+    grad_artists = grad_plot.update(grad_temps, gradients)
 
     # 更新進度條
     save_pbar.update(1)
 
-    # Return artists for blitting
-    return penguin_artists
+    # Return all artists for blitting
+    return phase_artists + penguin_artists + grad_artists
 
 
-# --- Save Animation as GIF ---
-print("Rendering animation to video (this may take a while)...")
+# --- Save Animation ---
+print("Rendering animation...")
 start_time = time.time()
 
 ani = animation.FuncAnimation(

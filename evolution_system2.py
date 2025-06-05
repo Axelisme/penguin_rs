@@ -4,7 +4,6 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 
-from util.stable_temp import get_stable_point
 from util.stastistic import get_env_temps_at_positions
 from util.theory.density import TheoreticalEvolution
 
@@ -143,10 +142,6 @@ def create_density_evolution_animation():
     print("Creating initial density distribution...")
     init_density = create_initial_density(init_body_temps, init_env_temps, xs, ys)
 
-    # 計算穩定點
-    x_stable, y_stable = get_stable_point(PREFER_TEMP, HEAT_GEN_COEFF, HEAT_E2P_COEFF)
-    print(f"Stable point: ({x_stable:.2f}, {y_stable:.2f})")
-
     # 創建理論演化系統
     theory_evolution = TheoreticalEvolution(
         init_density,
@@ -175,15 +170,6 @@ def create_density_evolution_animation():
     )
 
     # 添加穩定點到 ax1
-    ax1.plot(
-        x_stable,
-        y_stable,
-        "bo",
-        markersize=10,
-        label="Stable Point",
-        markeredgecolor="white",
-        markeredgewidth=2,
-    )
     ax1.axvline(
         PREFER_TEMP,
         color="blue",
@@ -272,7 +258,6 @@ def create_density_evolution_animation():
     print("Starting density evolution animation...")
     print(f"Parameters: dt={DT}, frames={TOTAL_FRAMES}, total_time={SIM_TIME}s")
     print(f"Grid size: {NUM_X_BINS}x{NUM_Y_BINS}")
-    print(f"Stable point: ({x_stable:.2f}, {y_stable:.2f})")
 
     # 創建動畫
     ani = animation.FuncAnimation(

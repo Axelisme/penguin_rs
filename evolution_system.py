@@ -4,11 +4,10 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 
-from util.stable_temp import get_stable_point
 from util.stastistic import get_env_temps_at_positions
 from util.theory.particle import TheoreticalEvolution
 
-load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
+load_path = os.path.join("data", "N500_T100s_C(False)", "simulation.npz")
 save_path = load_path.replace(".npz", "_theory1.mp4")
 save_path = None
 
@@ -40,8 +39,19 @@ x_range = [17.5, 22.5]
 y_range = [-20, 15]
 
 
+# def grad_func(y):
+#     grad = 25.57 * np.exp(-((y + 3.63) ** 2) / (2 * 9.47**2)) - 5.11
+#     return np.clip(grad, 0.0, None)
+
+
 def grad_func(y):
-    grad = 25.57 * np.exp(-((y + 3.63) ** 2) / (2 * 9.47**2)) - 5.11
+    # -5.02714357e-04 -1.76880183e-02 -2.31417227e-01 -1.83132979e-01, 2.77934649e+01]
+    a = -5.02714357e-04
+    b = -1.76880183e-02
+    c = -2.31417227e-01
+    d = -1.83132979e-01
+    e = 2.77934649e01
+    grad = a * y**4 + b * y**3 + c * y**2 + d * y + e
     return np.clip(grad, 0.0, None)
 
 
@@ -113,10 +123,6 @@ def create_theory_animation():
 
     init_x, init_y = load_simulation_data(load_path)
 
-    # 計算穩定點
-    x_stable, y_stable = get_stable_point(PREFER_TEMP, HEAT_GEN_COEFF, HEAT_E2P_COEFF)
-    print(f"Stable point: ({x_stable:.2f}, {y_stable:.2f})")
-
     # 創建理論演化系統
     theory_evolution = TheoreticalEvolution(
         init_x,
@@ -166,15 +172,6 @@ def create_theory_animation():
     )
 
     # 添加等勢線和穩定點
-    ax.plot(
-        x_stable,
-        y_stable,
-        "ro",
-        markersize=12,
-        label="Stable Point",
-        markeredgecolor="darkred",
-        markeredgewidth=2,
-    )
     ax.axvline(
         PREFER_TEMP,
         color="blue",
@@ -249,7 +246,6 @@ def create_theory_animation():
             f"Time: {current_t:.1f}s\n"
             f"Body Temp: {x_mean:.2f}±{x_std:.2f}\n"
             f"Env Temp: {y_mean:.2f}±{y_std:.2f}\n"
-            f"Distance to Stable: {np.sqrt((x_mean - x_stable) ** 2 + (y_mean - y_stable) ** 2):.2f}"
         )
 
         stats_text.set_text(stats_str)
@@ -260,7 +256,6 @@ def create_theory_animation():
 
     print("Starting theoretical evolution animation...")
     print(f"Parameters: dt={DT}, frames={TOTAL_FRAMES}, total_time={SIM_TIME}s")
-    print(f"Stable point: ({x_stable:.2f}, {y_stable:.2f})")
 
     # 創建動畫
     ani = animation.FuncAnimation(

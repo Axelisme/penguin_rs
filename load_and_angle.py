@@ -6,7 +6,7 @@ import numpy as np
 
 load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
 save_path = load_path.replace(".npz", "_angle.mp4")
-save_path = None
+# save_path = None
 
 
 def calculate_center_of_mass(positions):

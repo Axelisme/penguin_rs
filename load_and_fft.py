@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, fftfreq, ifft
 
-load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
+load_path = os.path.join("data", "N500_T100s_C(False)", "simulation.npz")
 save_path = load_path.replace(".npz", "_fft.png")
-save_path = None
+# save_path = None
 
 
 # 理論演化函數定義 (from evolution_system.py)
