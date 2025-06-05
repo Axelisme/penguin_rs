@@ -1,8 +1,11 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-load_path = "penguin_simulation_data.npz"
-save_path = load_path.replace(".npz", "_vel2_2d_plot.png")
+load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
+save_path = load_path.replace(".npz", "_phase2d.png")
+save_path = None
 
 
 def calculate_velocity_data_all_time(
@@ -134,8 +137,10 @@ def main():
     )
 
     plt.tight_layout()
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":

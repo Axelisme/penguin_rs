@@ -1,11 +1,14 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 
 from util.stastistic import get_env_temps_at_positions, get_grad_at_positions
 
-load_path = "penguin_simulation_data_no_colli.npz"
-save_path = load_path.replace(".npz", "_gradient_analysis.png")
+load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
+save_path = load_path.replace(".npz", "_grad.png")
+save_path = None
 
 
 def gaussian_func(x, A, mu, sigma, offset):

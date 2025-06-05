@@ -4,6 +4,14 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 
+from util.stable_temp import get_stable_point
+from util.stastistic import get_env_temps_at_positions
+from util.theory.particle import TheoreticalEvolution
+
+load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
+save_path = load_path.replace(".npz", "_theory1.mp4")
+save_path = None
+
 # Default parameters (will be overridden if loading from file)
 NUM_PENGUINS = 500
 PENGUIN_MOVE_FACTOR = 0.05
@@ -18,13 +26,26 @@ DECAY_COEFF = 0.4
 TEMP_ROOM = -30.0
 COLLISION_STRENGTH = 10.0  # 碰撞排斥力强度
 
+# 模擬參數
+SIM_TIME = 100.0
+DT = 0.01
+TOTAL_STEPS = int(SIM_TIME / DT)
+FRAMES_PER_SECOND = 20
+STEPS_PER_FRAME = max(1, int(1 / (FRAMES_PER_SECOND * DT)))
+TOTAL_FRAMES = int(TOTAL_STEPS / STEPS_PER_FRAME)
+
+
+# 設置繪圖範圍
+x_range = [17.5, 22.5]
+y_range = [-20, 15]
+
 
 def grad_func(y):
     grad = 25.57 * np.exp(-((y + 3.63) ** 2) / (2 * 9.47**2)) - 5.11
     return np.clip(grad, 0.0, None)
 
 
-def load_simulation_data(filename="penguin_simulation_data.npz"):
+def load_simulation_data(filename):
     """載入模擬資料並返回最後一幀的數據作為初始值"""
     global \
         NUM_PENGUINS, \
@@ -81,140 +102,31 @@ def load_simulation_data(filename="penguin_simulation_data.npz"):
     return init_body_temps, init_env_temps
 
 
-def get_env_temps_at_positions(positions, air_temp_grid, box_size):
-    """Get environmental temperature at each penguin position using bilinear interpolation"""
-    num_grid = air_temp_grid.shape[0]
-    env_temps = []
-
-    for pos in positions:
-        # Convert position to continuous grid coordinates
-        x_grid = (pos[0] / box_size) * num_grid
-        y_grid = (pos[1] / box_size) * num_grid
-
-        # Get integer parts and fractional parts for bilinear interpolation
-        x0 = int(np.floor(x_grid)) % num_grid
-        y0 = int(np.floor(y_grid)) % num_grid
-        x1 = (x0 + 1) % num_grid
-        y1 = (y0 + 1) % num_grid
-
-        # Fractional parts
-        fx = x_grid - np.floor(x_grid)
-        fy = y_grid - np.floor(y_grid)
-
-        # Bilinear interpolation
-        temp = (
-            air_temp_grid[x0, y0] * (1 - fx) * (1 - fy)
-            + air_temp_grid[x1, y0] * fx * (1 - fy)
-            + air_temp_grid[x0, y1] * (1 - fx) * fy
-            + air_temp_grid[x1, y1] * fx * fy
-        )
-        env_temps.append(temp)
-    return np.array(env_temps)
-
-
-class TheoreticalEvolution:
-    """理論演化系統模擬器"""
-
-    def __init__(self, init_x, init_y):
-        # 初始化企鵝的理論狀態 (x=body_temp, y=env_temp)
-        self.x = init_x
-        self.y = init_y
-
-    def dxdt(self, x, y):
-        """體溫演化方程: dx/dt = HEAT_GEN_COEFF - HEAT_E2P_COEFF*(x - y)"""
-        return HEAT_GEN_COEFF - HEAT_E2P_COEFF * (x - y)
-
-    def dydt(self, x, y):
-        """環境溫度演化方程: dy/dt = -PENGUIN_MOVE_FACTOR * density(y) * (x - PREFER_TEMP) * grad_func(y)"""
-        return -PENGUIN_MOVE_FACTOR * (x - PREFER_TEMP) * grad_func(y) ** 2
-
-    def step(self, dt):
-        """使用歐拉方法演化一步"""
-        dx = self.dxdt(self.x, self.y)
-        dy = self.dydt(self.x, self.y)
-
-        # add noise
-        dx += np.random.normal(0, 0.1, self.x.shape)
-        dy += np.random.normal(0, 0.1, self.y.shape)
-
-        self.x += dx * dt
-        self.y += dy * dt
-
-    def get_vector_field(self, x_grid, y_grid):
-        """計算向量場用於繪製"""
-        X, Y = np.meshgrid(x_grid, y_grid)
-        DX = self.dxdt(X, Y)
-        DY = self.dydt(X, Y)
-        return X, Y, DX, DY
-
-    def get_state(self):
-        """獲取當前狀態"""
-        return self.x.copy(), self.y.copy()
-
-
-def get_stable_point():
-    """計算理論穩定點"""
-    # dx/dt = 0: HEAT_GEN_COEFF - HEAT_E2P_COEFF*(x - y) = 0
-    # 當 x = PREFER_TEMP 時，dy/dt = 0
-    x_stable = PREFER_TEMP
-    y_stable = PREFER_TEMP - HEAT_GEN_COEFF / HEAT_E2P_COEFF
-    return x_stable, y_stable
-
-
-def create_theory_animation(load_file=None):
+def create_theory_animation():
     """創建理論演化動畫
 
     Parameters:
     -----------
     load_file : str, optional
-        要載入的模擬資料檔案名稱。如果為 None，使用預設檔名 "penguin_simulation_data.npz"
+        要載入的模擬資料檔案名稱。如果為 None, 使用預設檔名 "penguin_simulation_data.npz"
     """
 
-    # 嘗試載入模擬資料
-    if load_file is None:
-        init_body_temps, init_env_temps = load_simulation_data()
-    else:
-        init_body_temps, init_env_temps = load_simulation_data(load_file)
-
-    # 模擬參數
-    SIM_TIME = 100.0
-    DT = 0.01
-    TOTAL_STEPS = int(SIM_TIME / DT)
-    FRAMES_PER_SECOND = 20
-    STEPS_PER_FRAME = max(1, int(1 / (FRAMES_PER_SECOND * DT)))
-    TOTAL_FRAMES = int(TOTAL_STEPS / STEPS_PER_FRAME)
+    init_x, init_y = load_simulation_data(load_path)
 
     # 計算穩定點
-    x_stable, y_stable = get_stable_point()
+    x_stable, y_stable = get_stable_point(PREFER_TEMP, HEAT_GEN_COEFF, HEAT_E2P_COEFF)
     print(f"Stable point: ({x_stable:.2f}, {y_stable:.2f})")
 
-    # 設定初始值
-    if init_body_temps is not None and init_env_temps is not None:
-        # 使用載入的最後一幀數據作為初始值
-        init_x = init_body_temps.copy()
-        init_y = init_env_temps.copy()
-        print("Using loaded simulation data as initial conditions")
-    else:
-        # 使用隨機初始值
-        init_x = np.random.normal(19, 2.0, NUM_PENGUINS)
-        init_y = np.random.normal(-5, 5.0, NUM_PENGUINS)
-        print("Using random initial conditions")
-
     # 創建理論演化系統
-    theory_evolution = TheoreticalEvolution(init_x, init_y)
-
-    # 設置繪圖範圍
-
-    x_range = [17.5, 22.5]
-    y_range = [-20, 15]
-
-    env_temps = np.linspace(*y_range, 100)
-    grad_range = grad_func(env_temps)
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(env_temps, grad_range**2)
-    plt.show()
-    # exit()
+    theory_evolution = TheoreticalEvolution(
+        init_x,
+        init_y,
+        grad_func,
+        HEAT_GEN_COEFF,
+        HEAT_E2P_COEFF,
+        PENGUIN_MOVE_FACTOR,
+        PREFER_TEMP,
+    )
 
     # 創建圖形
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
@@ -242,10 +154,9 @@ def create_theory_animation(load_file=None):
     )
 
     # === 繪製企鵝演化 ===
-    x_penguins, y_penguins = theory_evolution.get_state()
     scatter = ax.scatter(
-        x_penguins,
-        y_penguins,
+        theory_evolution.x,
+        theory_evolution.y,
         c="red",
         s=12,
         alpha=0.8,
@@ -322,7 +233,8 @@ def create_theory_animation(load_file=None):
         current_t = (frame + 1) * STEPS_PER_FRAME * DT
 
         # 獲取當前狀態
-        x_penguins, y_penguins = theory_evolution.get_state()
+        x_penguins = theory_evolution.x
+        y_penguins = theory_evolution.y
 
         # 更新散點圖
         scatter.set_offsets(np.column_stack([x_penguins, y_penguins]))
@@ -361,7 +273,6 @@ def create_theory_animation(load_file=None):
     )
 
     plt.tight_layout()
-    plt.show()
 
     print("\nAnimation complete!")
 
@@ -370,4 +281,10 @@ def create_theory_animation(load_file=None):
 
 if __name__ == "__main__":
     # 當直接運行此檔案時，顯示理論演化動畫
-    create_theory_animation()
+
+    ani = create_theory_animation()
+
+    if save_path is not None:
+        ani.save(save_path, writer="ffmpeg", fps=FRAMES_PER_SECOND)
+    else:
+        plt.show()

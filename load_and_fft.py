@@ -1,6 +1,12 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, fftfreq, ifft
+
+load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
+save_path = load_path.replace(".npz", "_fft.png")
+save_path = None
 
 
 # 理論演化函數定義 (from evolution_system.py)
@@ -102,7 +108,7 @@ def calculate_theoretical_period(
 
 
 # 讀取 npz 檔案
-npz = np.load("penguin_simulation_data.npz", allow_pickle=True)
+npz = np.load(load_path, allow_pickle=True)
 
 positions = npz["positions"]  # shape: (frames, N, 2)
 body_temps = npz["body_temps"]  # shape: (frames, N)
@@ -334,85 +340,7 @@ ax4.legend()
 ax4.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("penguin_phase_aligned_analysis.png", dpi=300, bbox_inches="tight")
-plt.show()
-
-# Print detailed analysis results
-print("\n=== Analysis Results ===")
-print(f"Average body temperature: {np.mean(body_temps):.2f}°C")
-print(f"Temperature standard deviation: {np.std(body_temps):.2f}°C")
-print(f"Temperature range: [{np.min(body_temps):.2f}, {np.max(body_temps):.2f}]°C")
-
-print("\n=== Phase Alignment Results ===")
-print(f"Dominant frequency: {dominant_freq:.6f} Hz")
-print(f"Dominant frequency period: {1 / dominant_freq:.2f} s")
-print(
-    f"Amplitude before alignment: {avg_amplitude_of_interest[dominant_freq_idx_local]:.4f}"
-)
-print(
-    f"Amplitude after alignment: {aligned_amplitudes_of_interest[dominant_freq_idx_local]:.4f}"
-)
-print(
-    f"Amplitude enhancement ratio: {aligned_amplitudes_of_interest[dominant_freq_idx_local] / avg_amplitude_of_interest[dominant_freq_idx_local]:.2f}"
-)
-
-# Phase coherence analysis
-aligned_phases = np.angle(fft_sum_per_penguin) - ref_phase
-phase_std_before = np.std(phases)
-phase_std_after = np.std(aligned_phases)
-print(f"Phase standard deviation before alignment: {phase_std_before:.4f} rad")
-print(f"Phase standard deviation after alignment: {phase_std_after:.4f} rad")
-
-# Find top 5 frequencies in our range of interest
-freq_amplitude_pairs = list(zip(frequencies_of_interest, avg_amplitude_of_interest))
-freq_amplitude_pairs.sort(key=lambda x: x[1], reverse=True)
-
-print("\nTop 5 dominant frequencies in range:")
-for i, (freq, amp) in enumerate(freq_amplitude_pairs[:5]):
-    print(
-        f"{i + 1}. Frequency: {freq:.6f} Hz, Period: {1 / freq:.2f} s, Amplitude: {amp:.4f}"
-    )
-
-# Compare theoretical and experimental results
-print("\n=== Theoretical vs Experimental Comparison ===")
-if theory_results["is_oscillatory"]:
-    theoretical_freq = theory_results["frequency"]
-    theoretical_period = theory_results["period"]
-    experimental_freq = dominant_freq
-    experimental_period = 1 / dominant_freq
-
-    freq_ratio = experimental_freq / theoretical_freq
-    period_ratio = experimental_period / theoretical_period
-    freq_difference = abs(experimental_freq - theoretical_freq)
-    period_difference = abs(experimental_period - theoretical_period)
-
-    print(f"Theoretical frequency: {theoretical_freq:.6f} Hz")
-    print(f"Experimental frequency: {experimental_freq:.6f} Hz")
-    print(f"Frequency ratio (exp/theory): {freq_ratio:.3f}")
-    print(f"Frequency difference: {freq_difference:.6f} Hz")
-    print()
-    print(f"Theoretical period: {theoretical_period:.2f} s")
-    print(f"Experimental period: {experimental_period:.2f} s")
-    print(f"Period ratio (exp/theory): {period_ratio:.3f}")
-    print(f"Period difference: {period_difference:.2f} s")
-    print()
-
-    # Calculate relative error
-    freq_relative_error = freq_difference / theoretical_freq * 100
-    period_relative_error = period_difference / theoretical_period * 100
-    print(f"Frequency relative error: {freq_relative_error:.2f}%")
-    print(f"Period relative error: {period_relative_error:.2f}%")
-
-    if freq_relative_error < 10:
-        print("✓ Good agreement between theory and experiment!")
-    elif freq_relative_error < 30:
-        print("~ Reasonable agreement between theory and experiment")
-    else:
-        print("✗ Significant discrepancy between theory and experiment")
+if save_path is not None:
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
 else:
-    print(
-        "Theoretical system is not oscillatory - cannot compare with experimental oscillations"
-    )
-    print(
-        "This suggests the system parameters may be in a different regime than expected"
-    )
+    plt.show()

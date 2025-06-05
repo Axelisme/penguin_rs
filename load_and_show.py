@@ -1,10 +1,10 @@
+import os
 import time
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm.auto import tqdm
-
 
 from util import calculate_temp_gradient_relationship, get_env_temps_at_positions
 from util.animation import (
@@ -14,8 +14,12 @@ from util.animation import (
     VelocityRatioPlot,
 )
 
+load_path = os.path.join("data", "N500_T100s_C(True)", "simulation.npz")
+save_path = load_path.replace(".npz", ".mp4")
+save_path = None
+
 # 讀取 npz 檔案
-npz = np.load("penguin_simulation_data.npz", allow_pickle=True)
+npz = np.load(load_path, allow_pickle=True)
 
 positions = npz["positions"]  # shape: (frames, N, 2)
 body_temps = npz["body_temps"]  # shape: (frames, N)
@@ -175,11 +179,10 @@ ani = animation.FuncAnimation(
 )
 
 plt.tight_layout()
-ani.save(
-    "penguin_simulation_loaded.mp4",
-    writer="ffmpeg",
-    fps=FRAMES_PER_SECOND,
-)
+if save_path is not None:
+    ani.save(save_path, writer="ffmpeg", fps=FRAMES_PER_SECOND)
+else:
+    plt.show()
 
 save_pbar.close()
 end_time = time.time()

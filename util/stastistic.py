@@ -39,45 +39,6 @@ def calculate_temp_gradient_relationship(
     return temp_range, np.array(gradients)
 
 
-def calculate_penguin_density_by_temp(
-    positions, air_temp_grid, box_size, num_grid, temp_range=None, num_bins=50
-):
-    """Calculate penguin density at different temperature ranges"""
-    if temp_range is None:
-        temp_min, temp_max = np.min(air_temp_grid), np.max(air_temp_grid)
-        temp_range = np.linspace(temp_min, temp_max, num_bins)
-
-    densities = []
-    grid_cell_area = (box_size / num_grid) ** 2  # Area of each grid cell
-
-    for target_temp in temp_range:
-        # Create mask for grid cells within temperature range (±0.5°C)
-        temp_tolerance = 1.0
-        temp_mask = np.abs(air_temp_grid - target_temp) <= temp_tolerance
-
-        if np.any(temp_mask):
-            # Count penguins in these temperature zones
-            penguin_count = 0
-            total_area = np.sum(temp_mask) * grid_cell_area
-
-            for pos in positions:
-                # Convert position to grid indices
-                i = int(np.clip(pos[0] / box_size * num_grid, 0, num_grid - 1))
-                j = int(np.clip(pos[1] / box_size * num_grid, 0, num_grid - 1))
-
-                if temp_mask[i, j]:
-                    penguin_count += 1
-
-            # Calculate density (penguins per unit area)
-            density = penguin_count / total_area if total_area > 0 else 0.0
-        else:
-            density = 0.0
-
-        densities.append(density)
-
-    return temp_range, np.array(densities)
-
-
 def get_env_temps_at_positions(positions, air_temp_grid, box_size):
     """Get environmental temperature at each penguin position using bilinear interpolation"""
     num_grid = air_temp_grid.shape[0]
@@ -112,7 +73,6 @@ def get_env_temps_at_positions(positions, air_temp_grid, box_size):
 def get_grad_at_positions(positions, air_temp_grid, box_size):
     """Get temperature gradients at each penguin position using bilinear interpolation"""
     num_grid = air_temp_grid.shape[0]
-    grid_spacing = box_size / num_grid
     gradients = []
 
     # Pre-compute gradients at all grid points
