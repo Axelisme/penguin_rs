@@ -9,51 +9,30 @@ save_path = load_path.replace(".npz", "_fft.png")
 # save_path = None
 
 
-# 理論演化函數定義 (from evolution_system.py)
-def density_func(x, PREFER_TEMP):
-    """密度函數"""
-    return 0.5 + np.arctan(0.7 * (x - PREFER_TEMP) * np.pi) / np.pi
+# def grad_func(y):
+#     """梯度函數"""
+#     return np.clip(-0.051 * (y + 6.2) ** 2 + 17, 0.0, None)
 
 
 def grad_func(y):
-    """梯度函數"""
-    return np.clip(-0.051 * (y + 6.2) ** 2 + 17, 0.0, None)
+    a = -5.02714357e-04
+    b = -1.76880183e-02
+    c = -2.31417227e-01
+    d = -1.83132979e-01
+    e = 2.77934649e01
+    grad = a * y**4 + b * y**3 + c * y**2 + d * y + e
+    return np.clip(grad, 0.0, None)
 
 
 def calculate_theoretical_period(
     HEAT_GEN_COEFF, HEAT_E2P_COEFF, PENGUIN_MOVE_FACTOR, PREFER_TEMP
 ):
-    """
-    計算理論演化系統在穩定點附近的週期
-
-    理論演化方程:
-    dx/dt = HEAT_GEN_COEFF - HEAT_E2P_COEFF * (x - y)
-    dy/dt = -PENGUIN_MOVE_FACTOR * density(x) * (x - PREFER_TEMP) * grad(y)**2
-
-    Returns:
-    --------
-    theory_period : float
-        理論週期 (秒)
-    theory_freq : float
-        理論頻率 (Hz)
-    x_stable : float
-        穩定點的 x 座標 (體溫)
-    y_stable : float
-        穩定點的 y 座標 (環境溫度)
-    eigenvalues : complex array
-        Jacobian 矩陣的特徵值
-    """
-
     # 計算穩定點
     # 穩定點條件: dx/dt = 0 和 dy/dt = 0
     # dy/dt = 0 當 x = PREFER_TEMP (假設 density(x) != 0 且 grad(y) != 0)
     x_stable = PREFER_TEMP
     # dx/dt = 0: HEAT_GEN_COEFF - HEAT_E2P_COEFF * (x_stable - y_stable) = 0
     y_stable = x_stable - HEAT_GEN_COEFF / HEAT_E2P_COEFF
-
-    # 計算穩定點處的函數值
-    density_at_stable = density_func(x_stable, PREFER_TEMP)
-    grad_at_stable = grad_func(y_stable)
 
     # 計算 Jacobian 矩陣
     # J = [∂(dx/dt)/∂x  ∂(dx/dt)/∂y]
@@ -67,7 +46,7 @@ def calculate_theoretical_period(
 
     # ∂(dy/dt)/∂x = -PENGUIN_MOVE_FACTOR * [density'(x) * (x - PREFER_TEMP) + density(x)] * grad(y)**2
     # 在穩定點 x = PREFER_TEMP，所以 (x - PREFER_TEMP) = 0
-    J21 = -PENGUIN_MOVE_FACTOR * density_at_stable * grad_at_stable**2
+    J21 = -PENGUIN_MOVE_FACTOR * grad_func(y_stable) ** 2
 
     # ∂(dy/dt)/∂y = -PENGUIN_MOVE_FACTOR * density(x) * (x - PREFER_TEMP) * 2 * grad(y) * grad'(y)
     # 在穩定點 x = PREFER_TEMP，所以 (x - PREFER_TEMP) = 0
